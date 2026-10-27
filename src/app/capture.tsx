@@ -158,6 +158,7 @@ export default function CaptureScreen() {
           uploadPhoto,
           setPhase,
           edit,
+          preview?.token,
         );
         if (!edit) {
           setPreview(result);

@@ -79,6 +79,7 @@ export class CaptureSession {
     put: (photo: Photo, upload: UploadUrl) => Promise<void>,
     onPhase: (phase: Phase) => void,
     edit?: MaskEdit,
+    baseToken?: string,
   ): Promise<SegmentationPreview> {
     this.started = true;
     if (!this.problemId) {
@@ -116,6 +117,7 @@ export class CaptureSession {
     if (edit) {
       const key = JSON.stringify({
         edit,
+        baseToken,
         calibration: draft.photo.calibration,
         hazards: draft.hazards,
       });
@@ -133,7 +135,7 @@ export class CaptureSession {
         this.captureId,
         selection,
         edit,
-        this.preview?.token,
+        baseToken,
         draft.photo.calibration,
         draft.hazards,
       );

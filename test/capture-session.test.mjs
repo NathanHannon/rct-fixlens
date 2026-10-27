@@ -225,6 +225,38 @@ const edit = {
   base: "blank",
   strokes: [{ mode: "paint", radius: 4, points: [{ x: 20, y: 30 }] }],
 };
+test("undo after a failed assessment applies edits to the visible original preview", async () => {
+  const f = fixture(),
+    session = new CaptureSession();
+  await session.prepare(draft, selection, f.api, f.put, () => {});
+  const originalToken = session.preview.token;
+  const erase = {
+    base: "preview",
+    strokes: [{ mode: "erase", radius: 4, points: [{ x: 20, y: 30 }] }],
+  };
+  await session.prepare(
+    draft,
+    selection,
+    f.api,
+    f.put,
+    () => {},
+    erase,
+    originalToken,
+  );
+  assert.equal(session.preview.token, "edited-mask");
+  await session.prepare(
+    draft,
+    selection,
+    f.api,
+    f.put,
+    () => {},
+    { ...erase, strokes: [] },
+    originalToken,
+  );
+  const saves = f.calls.filter((c) => c.name === "editMask");
+  assert.equal(saves.length, 2);
+  assert.equal(saves[1].args[4], originalToken);
+});
 test("manual outline proceeds to assessment without automatic segmentation", async () => {
   const f = fixture(),
     session = new CaptureSession();
