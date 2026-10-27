@@ -1,56 +1,96 @@
-# Welcome to your Expo app 👋
+# FixLens mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo SDK 58 + React Native + Expo Router. The app connects to the Nest backend in `../nst-fixlens` and uses the shared demo home; there is no login.
 
-## Get started
+## Run on a phone with Expo Go
 
-1. Install dependencies
+Use Node.js 24. In the backend folder, start Nest (`npm run start:dev`). Then, here:
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```sh
+npm ci
+# PowerShell: Copy-Item .env.example .env.local
+cp .env.example .env.local
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Set `EXPO_PUBLIC_API_URL` in `.env.local` to your computer's Wi-Fi address, for example `http://10.0.0.239:3000`. Your phone and computer must share a network. `localhost` on the phone points to the phone itself. The current machine's address has been set in the ignored `.env.local`; update it if your network changes.
 
-### Other setup steps
+Open the QR code in Expo Go (iPhone: Camera; Android: Expo Go scanner). Allow local-network/camera access when prompted. You can also enter `exp://10.0.0.239:8081` in Expo Go. Use a compatible SDK 58 Expo Go version. The image picker, image manipulator, file-system uploader, and native Expo UI controls are included; no custom build is required for this flow. Permission wording from app.json applies to your own builds; Expo Go has its own permission prompts.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Check `http://<computer-ip>:3000/health` from the phone's browser if API requests fail. Windows Firewall may need to allow Node.js on private networks. An Expo tunnel forwards Metro, not the separate Nest API; use a reachable HTTPS API URL when testing away from the local network. No firewall settings are modified by this project.
 
-## Learn more
+## Current user flow
 
-To learn more about developing your project with Expo, look at the following resources:
+1. **Photo:** take a photo or choose one from the library. A supported native development build also offers capture with a size estimate. The home screen prioritizes the capture action and saved problems.
+2. **Mark and describe:** brush over the damage and optionally name it in your own words. There is no separate selection-confirmation/context screen. Location, category and observations live under **More details (optional)**; explicit hazard switches remain available under **Safety concerns**, with a visible count/notice when selected. **Size estimate (optional)** contains reference-card calibration, and **Photo options** contains retake/change/whole-photo actions. Nothing uploads until Preview highlight or the editor's assessment action is used.
+3. **Automatic preview:** **Preview highlight** saves/uploads/registers once, runs Muse targeting and cropped SAM with quality checks, and displays the resulting outline. **Get assessment** confirms that visible outline. **Edit highlight** opens Paint/Erase/Undo with zoom/pan; **Redraw area** retries targeting using the same uploaded capture. Failed automatic isolation offers a manual outline first, with **Assess photo without measurements** still available.
+4. **Manual outline:** **Use my tracing** opens the editor using the user's brush strokes and skips automatic targeting/SAM. **Use outline and assess** is the user's explicit confirmation: it saves the source-sized mask and immediately requests the final assessment, without a second confirmation screen. Cancel preserves the previous preview. A failed outline save retains the strokes; a failed final assessment reuses the successfully saved outline/token on retry. Changed strokes, scale/hazards, cancellation or an expired confirmation invalidate this reuse. Duplicate submissions remain blocked.
+5. **Report:** urgency, likely cause, confidence, DIY/pro guidance, warning signs and change summary. Assessment provenance/long confidence notes are under **Assessment details**; optional photo/mask downloads are under **Save a device copy**. Safety overrides and measurement limitations stay visible. Final Muse can still withhold measurements if the outline is unreliable. A drawn outline supplies neither real-world scale nor crack width/depth.
+6. **Check again:** capture the same spot under the existing problem; it registers a non-baseline capture. Missing scale or unreliable outlines remain explicitly unmeasured.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+The first successful capture of a new problem is its baseline. Images are converted to JPEG and resized to a maximum 2000 px edge with the SDK 58 ImageManipulator API. Saved dimensions describe the uploaded image. `taken_at` currently records when the image is selected/captured in this flow, rather than parsing historical gallery EXIF dates.
 
-## Join the community
+Originals live under `captures/`, temporary SAM masks under `previews/`, and confirmed masks under `masks/` in the same private bucket. Postgres keeps object keys and report/measurement data. Only the public API URL lives in the client. Database and Spaces credentials stay on the server; the phone gets a temporary upload URL.
 
-Join our community of developers creating universal apps.
+## Loading and retry behavior
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Initial loading, empty home, errors, and existing content are separate states. Failed refreshes preserve existing results. Ordinary requests time out after 30 seconds; preview allows 210 seconds for bounded targeting/SAM attempts and final assessment allows 120 seconds. Timeouts show a retry message. Upload/diagnosis progress uses actual completed stages, with no invented percentage.
+
+While submitting, duplicate taps are blocked. Failed attempts keep the photo and context in memory. Preview and assessment are separate steps; previewing never requests a diagnosis. A signed confirmation binds the exact preview to the capture and expires after 15 minutes. An expired highlight must be reviewed again. Redraw reruns Muse targeting and SAM while reusing the original upload. A failed assessment retries Muse with the reviewed mask. Successful stages are reused on retry, including the same capture key after a lost registration response. The API returns the original immutable capture on repeat registration. A lost diagnosis response is checked against the persisted report before asking the user to retry. The draft is not persisted across app termination or leaving the capture screen; a created problem can remain without a report if the flow is abandoned.
+
+## Demo limits
+
+The backend supports real Meta inference with `DIAGNOSIS_PROVIDER=meta`, or mock inference with `DIAGNOSIS_PROVIDER=mock`. The UI labels mock-version results explicitly. Real photos are still uploaded to the configured private bucket and real records are saved. Re-capture guidance is text-only; baseline alignment overlays, automatic alignment, private-photo download/display in saved reports, calibrated measurements, reminders, are follow-up work. A suggested recheck date does not schedule a notification.
+
+## Web preview and checks
+
+```sh
+npm run typecheck
+npm run lint
+npm test
+npm run test:browser
+npx expo export --platform ios --platform android
+npm run web
+```
+
+Browser tests export the production web bundle and serve it on port 8082, with API/storage responses intercepted. They cover photo selection, freehand brush paths, undo/clear, source coordinates and foreground samples, SAM highlight confirmation, redraw, context, safety flags, direct PUT, report rendering, saved-home navigation, and failure/retry without duplicate captures. Windows uses the installed Edge browser; other platforms use Playwright Chromium (`npx playwright install chromium`). Override `PLAYWRIGHT_CHANNEL` to choose another installed browser.
+
+The Nest API permits localhost web origins on 8081 and 8082. For other origins set its comma-separated `CORS_ORIGINS`. Spaces also needs bucket CORS allowing GET, PUT, and Content-Type for the browser origin. Native Expo Go uploads do not use browser CORS.
+
+The phone's actual camera permissions, painting versus scroll gestures, portrait/landscape rotation, keyboard layout, and native SwiftUI/Compose controls must still be exercised on device; browser tests and bundle compilation do not replace that check. See the [SDK 58 docs](https://docs.expo.dev/versions/v58.0.0/) for the package APIs.
+
+## Optional device copies
+
+On a saved report, tap **Save photo and mask**. This requests add-only photo permission when needed and saves the unmarked assessment JPEG and a separate transparent PNG mask to Photos/gallery. It exports the prepared photo stored in Spaces; it does not alter or remove the original camera image. The mask is a 2D image, not a 3D mesh. Mock reports have no real mask and offer Save photo only.
+
+The app requests fresh signed URLs for that report's capture, downloads directly from the private bucket, adds assets using SDK 58 `Asset.create`, and removes temporary cache files. The action does not invoke SAM or Muse. If one asset succeeds and the next fails, retry on this screen writes only the missing asset; the report remains usable. Permission denial shows a retry message and a Settings action when the OS blocks further prompts. Save progress is kept in memory during this screen visit, not across app termination/navigation.
+
+On web the action starts two downloads instead of accessing a photo library. Some browsers require allowing multiple downloads. Browser success means a download was initiated; disk-save confirmation is controlled by the browser. `expo-media-library` is bundled in SDK 58 Expo Go; custom permission wording in app.json applies to a rebuilt standalone/development app, while Expo Go supplies its own wording. The add-only request uses an empty read-permission list, avoiding Expo Go Android's restricted full-library access. Real permission prompts and Photos/gallery writes still require phone testing.
+
+## Optional size estimates
+
+The backend must first have `../nst-fixlens/sql/002-calibration.sql` applied as its table owner (`doadmin` for the current managed database) and be restarted with this version. Older saved reports remain uncalibrated.
+
+**Expo Go / any phone / gallery photos:** include a standard bank-size plastic card (85.60 × 53.98 mm), blank side up, flat beside the damage on the same surface. After painting, tap **Add a reference card** in Context. Tap four corners around the rectangle, following the long edge first; undo is available. Confirm that the card is standard size and on the same plane, or continue without measurements. No printing or additional AI call. This version uses manual corners; automatic card detection and a ruler option are not implemented.
+
+**Native development build:** **Take a photo with size estimate** appears when the local module and device support surface tracking. Slowly scan the wall/floor, aim the crosshair at the damage, then Capture surface. iOS uses ARKit world tracking and existing-plane raycasts, enabling scene depth on LiDAR devices when available. Android uses ARCore plane hit tests, enables Depth when supported, and handles the AR service installation prompt. Both save a JPEG from the same AR frame used for plane projection; gallery images never inherit unrelated AR geometry. Camera permission is requested only when opening capture. Unavailable tracking has a cancel/reference-card fallback. The Android capture screen includes Google's AR privacy disclosure/link; no Cloud Anchors or Geospatial services are used.
+
+The native module lives in `modules/fixlens-measurement`. Android uses ARCore 1.54.0 and is optional for app installation; other flows work without it. Generated root native projects stay ignored. The module's Android code and merged app manifest compile locally. iOS Swift needs an Xcode/EAS build; neither platform's physical accuracy or real camera lifecycle has been validated on a phone yet.
+
+```sh
+# Keep existing Expo Go workflow (reference-card option)
+npm start
+# Local Android development build; requires JDK/Android SDK
+npm run android
+# Native development build Metro server
+npm run start:dev-client
+# iPhone from Windows: sign in/link the Expo project and register your device first
+npx eas-cli@latest login
+npx eas-cli@latest init
+npx eas-cli@latest device:create
+npx eas-cli@latest build --platform ios --profile development
+```
+
+`eas.json` includes an internal development-client profile. `com.fixlens.app` is the current development bundle/package ID; choose your final owned ID before store distribution. No EAS project, signing credentials, cloud build, or store submission was created automatically.
+
+The app scales native reference points together with the prepared JPEG, sends optional calibration only with segmentation, and displays approximate highlighted area in cm² on the report only after the final mask review accepts it. The backend stores the reference/transform/quality with the committed measurement. Pixel counts keep their original meaning. These estimates do not measure narrow crack width, displacement or hidden damage; a poor mask, oblique image, curved surface, or inaccurate corner tap can give a poor estimate. A later photo needs its own calibration. Cross-method comparisons are withheld. Native device copies still export an unmarked JPEG and 2D transparent mask, not a 3D mesh.

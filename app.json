@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "fixlens",
+    "name": "FixLens",
     "slug": "fixlens",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,9 +8,11 @@
     "scheme": "fixlens",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.fixlens.app",
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.fixlens.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -31,6 +33,23 @@
           "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "FixLens uses your camera to photograph household problems.",
+          "photosPermission": "Choose a household problem photo to assess and track.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Choose a household problem photo to assess and track.",
+          "savePhotosPermission": "FixLens saves the problem photo and segmentation mask only when you choose Save to device.",
+          "granularPermissions": [],
+          "isAccessMediaLocationEnabled": false
         }
       ]
     ],
