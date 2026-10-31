@@ -14,6 +14,8 @@ import type {
   Selection,
   SegmentationPreview,
   CalibrationInput,
+  JobFiles,
+  JobDeletion,
 } from "./types";
 
 export const apiUrl =
@@ -36,6 +38,7 @@ async function request<T>(
   body?: unknown,
   signal?: AbortSignal,
   timeoutMs = 30_000,
+  method?: "DELETE",
 ): Promise<T> {
   if (!apiUrl)
     throw new Error(
@@ -48,7 +51,7 @@ async function request<T>(
   const timeout = setTimeout(abort, timeoutMs);
   try {
     const response = await fetch(`${apiUrl}${path}`, {
-      method: body === undefined ? "GET" : "POST",
+      method: method ?? (body === undefined ? "GET" : "POST"),
       headers: {
         Accept: "application/json",
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
@@ -80,6 +83,24 @@ async function request<T>(
   }
 }
 export const api = {
+  deleteProblem: (id: string) =>
+    request<JobDeletion>(
+      `/problems/${id}`,
+      undefined,
+      undefined,
+      60_000,
+      "DELETE",
+    ),
+  jobFiles: (id: string, signal?: AbortSignal) =>
+    request<JobFiles>(`/problems/${id}/storage`, undefined, signal),
+  clearPreviews: (id: string) =>
+    request<{ removed: number }>(
+      `/problems/${id}/previews`,
+      undefined,
+      undefined,
+      30_000,
+      "DELETE",
+    ),
   problems: (signal?: AbortSignal) =>
     request<Problem[]>("/problems", undefined, signal),
   problem: (id: string, signal?: AbortSignal) =>

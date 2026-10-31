@@ -40,6 +40,7 @@ async function backend(
   unavailable = false,
   rejected = false,
   failEdit = false,
+  failDelete = false,
 ) {
   const counts = {
     creates: 0,
@@ -51,6 +52,10 @@ async function backend(
   let savedReport = false;
   let currentProblem = { ...problem };
   let calibrated = false;
+  let deletedJob = false,
+    deleteAttempts = 0,
+    previewCount = 2;
+  let calibrationMethod = "reference_card";
   let edits = 0;
   let confirmationToken = "confirmed-mask";
   await page.route("**/problems**", async (route) => {
@@ -67,7 +72,7 @@ async function backend(
       if (req.method() === "GET")
         return failList
           ? respond({ error: { message: "Database unavailable" } }, 503)
-          : respond(counts.creates ? [currentProblem] : []);
+          : respond(counts.creates && !deletedJob ? [currentProblem] : []);
       counts.creates++;
       currentProblem = { ...problem, ...req.postDataJSON() };
       return respond(currentProblem, 201);
@@ -84,12 +89,41 @@ async function backend(
         },
         201,
       );
+    if (
+      url.pathname === "/problems/" + problemId &&
+      req.method() === "DELETE"
+    ) {
+      deleteAttempts++;
+      if (failDelete && deleteAttempts === 1)
+        return respond(
+          { error: { message: "Deletion unavailable. Try again." } },
+          503,
+        );
+      deletedJob = true;
+      return respond(
+        { id: problemId, status: "deleted", cleanup_pending: true },
+        202,
+      );
+    }
+    if (url.pathname.endsWith("/storage"))
+      return respond({
+        photos: 1,
+        outlines: 1,
+        previews: previewCount,
+        bytes: 1572864,
+      });
+    if (url.pathname.endsWith("/previews") && req.method() === "DELETE") {
+      previewCount = 0;
+      return respond({ removed: 2 });
+    }
     if (url.pathname.endsWith("/captures")) {
       counts.registrations++;
       return respond({ id: captureId }, 201);
     }
     if (url.pathname.endsWith("/segment")) {
       calibrated = Boolean(req.postDataJSON().calibration);
+      calibrationMethod =
+        req.postDataJSON().calibration?.method ?? "reference_card";
       counts.segments++;
       const selection = req.postDataJSON().selection;
       expect(selection.x2).toBeGreaterThan(selection.x1);
@@ -118,6 +152,8 @@ async function backend(
     }
     if (url.pathname.endsWith("/mask-edits")) {
       const body = req.postDataJSON();
+      calibrated = Boolean(body.calibration);
+      calibrationMethod = body.calibration?.method ?? "reference_card";
       expect(body.capture_id).toBe(captureId);
       expect(body.strokes.length).toBeLessThanOrEqual(64);
       if (failEdit && edits++ === 0)
@@ -196,7 +232,10 @@ async function backend(
         ? {
             latest_measurement: {
               calibrated_area_mm2: 4500,
-              calibration: { method: "reference_card", quality: "approximate" },
+              calibration: {
+                method: calibrationMethod,
+                quality: "approximate",
+              },
             },
           }
         : {}),
@@ -255,7 +294,7 @@ async function choosePhoto(page: Page, details = true) {
   await page.getByText("More details (optional)", { exact: true }).click();
   await page.getByPlaceholder("Basement, north wall").fill("Basement");
   await page
-    .getByPlaceholder("When did it appear? Has it changed?")
+    .getByPlaceholder("Thin gray scuff near the light, not the whole ceiling")
     .fill("New damage");
 }
 async function editStroke(page: Page) {
@@ -375,7 +414,7 @@ test("the default path needs only photo, paint, preview and assessment", async (
     page.getByRole("switch", { name: "Gas smell or suspected gas leak" }),
   ).toBeHidden();
   await expect(
-    page.getByText("Add a reference card", { exact: true }),
+    page.getByText("Add size reference", { exact: true }),
   ).toBeHidden();
   await page.screenshot({
     path: ".tmp/streamlined-mark-phone.png",
@@ -404,6 +443,64 @@ test("the default path needs only photo, paint, preview and assessment", async (
     diagnoses: 1,
   });
 });
+test("a visible description guides targeting and can be refined without another upload", async ({
+  page,
+}) => {
+  const counts = await backend(page);
+  const targets: string[] = [],
+    assessments: string[] = [];
+  page.on("request", (req) => {
+    if (req.method() !== "POST") return;
+    if (req.url().endsWith("/segment"))
+      targets.push(req.postDataJSON().context);
+    if (req.url().endsWith("/diagnose"))
+      assessments.push(req.postDataJSON().context);
+  });
+  await page.goto("/");
+  await choosePhoto(page, false);
+  const description = page.getByPlaceholder(
+    "Thin gray scuff near the light, not the whole ceiling",
+  );
+  await expect(description).toBeVisible();
+  await expect(page.getByPlaceholder("Basement, north wall")).toBeHidden();
+  await description.fill("  Gray mark near the light.  ");
+  await page.getByText("Preview highlight", { exact: true }).click();
+  await expect(
+    page.getByText("Does the highlight cover the problem?", { exact: true }),
+  ).toBeVisible();
+  expect(targets).toEqual(["Gray mark near the light."]);
+  await page.getByText("Adjust description or area", { exact: true }).click();
+  await expect(description).toHaveValue("  Gray mark near the light.  ");
+  await expect(description).toBeEditable();
+  await description.fill(
+    "Thin gray scuff near the light; leave out the surrounding ceiling.",
+  );
+  await page.screenshot({
+    path: ".tmp/description-mark-phone.png",
+    fullPage: true,
+  });
+  await page.getByText("Preview highlight", { exact: true }).click();
+  await expect(
+    page.getByText("Does the highlight cover the problem?", { exact: true }),
+  ).toBeVisible();
+  expect(targets).toEqual([
+    "Gray mark near the light.",
+    "Thin gray scuff near the light; leave out the surrounding ceiling.",
+  ]);
+  expect(counts).toMatchObject({
+    creates: 1,
+    uploads: 1,
+    registrations: 1,
+    segments: 2,
+    diagnoses: 0,
+  });
+  await page.getByText("Get assessment", { exact: true }).click();
+  await expect(
+    page.getByText("Mock assessment: surface damage", { exact: true }),
+  ).toBeVisible();
+  expect(assessments).toEqual([targets[1]]);
+});
+
 test("a failed assessment reuses the saved outline when the user retries in the editor", async ({
   page,
 }) => {
@@ -460,7 +557,7 @@ test("optional reference card preserves photo coordinates and shows approximate 
   await page.goto("/");
   await choosePhoto(page);
   await page.getByText("Size estimate (optional)", { exact: true }).click();
-  await page.getByText("Add a reference card", { exact: true }).click();
+  await page.getByText("Add size reference", { exact: true }).click();
   const use = page.getByText("Use reference card", { exact: true });
   await expect(use).toBeDisabled();
   const canvas = page.getByTestId("photo-calibration");
@@ -586,6 +683,117 @@ test("photo → context → direct upload → safety report, with recovery from 
     page.getByText("Ceiling scuff · Basement", { exact: true }),
   ).toBeVisible();
 });
+test("an existing photo can use an inch-measured rectangle and identifies that reference in the report", async ({
+  page,
+}) => {
+  const counts = await backend(page);
+  await page.goto("/");
+  await choosePhoto(page, false);
+  await page.getByText("Size estimate (optional)", { exact: true }).click();
+  await page.getByText("Add size reference", { exact: true }).click();
+  await page.getByTestId("reference-method").selectOption("known_rectangle");
+  await page.getByTestId("reference-unit").selectOption("in");
+  await page.getByPlaceholder("Measured width").fill("12");
+  await page.getByPlaceholder("Measured height").fill("6");
+  const use = page.getByText("Use measured rectangle", { exact: true });
+  await expect(use).toBeDisabled();
+  const canvas = page.getByTestId("photo-calibration");
+  await canvas.scrollIntoViewIfNeeded();
+  const box = (await canvas.boundingBox())!;
+  for (const [x, y] of [
+    [0.2, 0.2],
+    [0.7, 0.25],
+    [0.65, 0.65],
+    [0.15, 0.6],
+  ])
+    await page.mouse.click(box.x + x * box.width, box.y + y * box.height);
+  await expect(use).toBeDisabled();
+  await page
+    .getByText("Measured rectangle on the same flat surface", { exact: true })
+    .click();
+  await page.screenshot({
+    path: ".tmp/measured-rectangle-phone.png",
+    fullPage: true,
+  });
+  await use.click();
+  expect(counts.uploads).toBe(0);
+  await page.getByText("Size reference added", { exact: true }).click();
+  await expect(
+    page.getByText("Using a measured rectangle.", { exact: true }),
+  ).toBeVisible();
+  await page.getByText("Change size reference", { exact: true }).click();
+  await expect(page.getByPlaceholder("Measured width")).toHaveValue("30.48");
+  await expect(page.getByPlaceholder("Measured height")).toHaveValue("15.24");
+  await expect(
+    page.getByText("4 / 4 corners selected", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByText("Measured rectangle on the same flat surface", { exact: true })
+    .click();
+  await use.click();
+  const sent = page.waitForRequest(
+    (req) => req.url().endsWith("/segment") && req.method() === "POST",
+  );
+  await page.getByText("Preview highlight", { exact: true }).click();
+  expect((await sent).postDataJSON().calibration).toMatchObject({
+    method: "known_rectangle",
+    width_mm: 304.8,
+    height_mm: 152.4,
+  });
+  await page.getByText("Get assessment", { exact: true }).click();
+  await expect(
+    page.getByText("Calibrated using a measured rectangle.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("phone surface tracking", { exact: false }),
+  ).toHaveCount(0);
+  expect(counts.uploads).toBe(1);
+  expect(counts.diagnoses).toBe(1);
+});
+test("invalid rectangle sizes and crossed corners preserve the draft without uploading", async ({
+  page,
+}) => {
+  const counts = await backend(page);
+  await page.goto("/");
+  await choosePhoto(page, false);
+  await page.getByText("Size estimate (optional)", { exact: true }).click();
+  await page.getByText("Add size reference", { exact: true }).click();
+  await page.getByTestId("reference-method").selectOption("known_rectangle");
+  const canvas = page.getByTestId("photo-calibration");
+  await canvas.scrollIntoViewIfNeeded();
+  const box = (await canvas.boundingBox())!;
+  for (const [x, y] of [
+    [0.2, 0.2],
+    [0.7, 0.2],
+    [0.2, 0.6],
+    [0.7, 0.6],
+  ])
+    await page.mouse.click(box.x + x * box.width, box.y + y * box.height);
+  await page
+    .getByText("Measured rectangle on the same flat surface", { exact: true })
+    .click();
+  const use = page.getByText("Use measured rectangle", { exact: true });
+  await use.click();
+  await expect(
+    page.getByText("Enter the actual measured width and height.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await page.getByPlaceholder("Measured width").fill("30");
+  await page.getByPlaceholder("Measured height").fill("15");
+  await use.click();
+  await expect(
+    page.getByText("Those corners cross or overlap.", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByPlaceholder("Measured width")).toHaveValue("30");
+  await page.getByText("Clear corners", { exact: true }).click();
+  await expect(
+    page.getByText("0 / 4 corners selected", { exact: true }),
+  ).toBeVisible();
+  await expect(use).toBeDisabled();
+  expect(counts.uploads).toBe(0);
+  expect(counts.segments).toBe(0);
+});
 
 test("unreliable segmentation can be assessed without a mask or physical measurements", async ({
   page,
@@ -664,7 +872,7 @@ test("redrawing previews a different region without another photo upload or earl
   await expect(
     page.getByText("Does the highlight cover the problem?"),
   ).toBeVisible();
-  await page.getByText("Redraw area", { exact: true }).click();
+  await page.getByText("Adjust description or area", { exact: true }).click();
   await drawStroke(page);
   await page.getByText("Preview highlight", { exact: true }).click();
   await expect(
@@ -762,4 +970,170 @@ test("device copies are optional and retry only the missing image after a failed
   await expect(
     page.getByText("Downloads started", { exact: true }),
   ).toBeDisabled();
+});
+test("job deletion requires confirmation, keeps failures retryable, and removes the saved job", async ({
+  page,
+}) => {
+  await backend(page, false, false, false, false, false, true);
+  let deletes = 0;
+  page.on("request", (req) => {
+    if (
+      req.method() === "DELETE" &&
+      req.url().endsWith("/problems/" + problemId)
+    )
+      deletes++;
+  });
+  await page.goto("/");
+  await choosePhoto(page, false);
+  await page.getByText("Preview highlight", { exact: true }).click();
+  await page.getByText("Get assessment", { exact: true }).click();
+  await page.getByText("Delete job and cloud files", { exact: true }).click();
+  await expect(
+    page.getByText("Delete this job?", { exact: true }),
+  ).toBeVisible();
+  expect(deletes).toBe(0);
+  await page.getByText("Keep job", { exact: true }).click();
+  expect(deletes).toBe(0);
+  await page.getByText("Delete job and cloud files", { exact: true }).click();
+  await expect(page.getByTestId("confirm-delete-job")).toBeVisible();
+  await expect(page.getByTestId("confirm-delete-job")).toBeInViewport();
+  await page.screenshot({
+    path: ".tmp/delete-job-phone.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.getByTestId("confirm-delete-job").click();
+  await expect(
+    page.getByText("Deletion unavailable. Try again.", { exact: true }),
+  ).toBeVisible();
+  await page.getByText("Retry deletion", { exact: true }).click();
+  await expect(
+    page.getByText("Start with one photo.", { exact: true }),
+  ).toBeVisible();
+  expect(deletes).toBe(2);
+});
+test("cloud files can clear temporary previews without deleting the job or its saved media", async ({
+  page,
+}) => {
+  await backend(page);
+  let previewDeletes = 0;
+  page.on("request", (req) => {
+    if (req.method() === "DELETE" && req.url().endsWith("/previews"))
+      previewDeletes++;
+  });
+  await page.goto("/");
+  await choosePhoto(page, false);
+  await page.getByText("Preview highlight", { exact: true }).click();
+  await page.getByText("Get assessment", { exact: true }).click();
+  await expect(
+    page.getByRole("img", { name: "Assessment photo", exact: true }),
+  ).toBeVisible();
+  await page.getByText("Show damage outline", { exact: true }).click();
+  await expect(
+    page.getByRole("img", { name: "Saved damage outline", exact: true }),
+  ).toBeVisible();
+  await page.getByText("Manage cloud files", { exact: true }).click();
+  await expect(
+    page.getByText("2 temporary previews", { exact: true }),
+  ).toBeVisible();
+  await page.getByText("Clear temporary previews", { exact: true }).click();
+  await page.getByText("Keep previews", { exact: true }).click();
+  expect(previewDeletes).toBe(0);
+  await page.getByText("Clear temporary previews", { exact: true }).click();
+  await page.getByText("Delete previews", { exact: true }).click();
+  await expect(
+    page.getByText("0 temporary previews", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("1 photos · 1 saved outlines", { exact: true }),
+  ).toBeVisible();
+  expect(previewDeletes).toBe(1);
+  await page.getByText("Done", { exact: true }).click();
+  await expect(
+    page.getByText("Mock assessment: surface damage", { exact: true }),
+  ).toBeVisible();
+});
+test("saved jobs show thumbnails and support search, status filters, and deletion from the list", async ({
+  page,
+}) => {
+  await backend(page);
+  const secondId = "44444444-4444-4444-8444-444444444444";
+  let jobs = [
+    {
+      ...problem,
+      title: "Garage floor",
+      current_urgency: "monitor",
+      latest_capture: {
+        id: captureId,
+        photo_url: "https://uploads.fixlens.test/thumb.jpg",
+      },
+    },
+    {
+      ...problem,
+      id: secondId,
+      title: "Kitchen water stain",
+      category: "water_stain",
+      current_urgency: "fix_soon",
+    },
+  ];
+  await page.route("**/problems", (route) =>
+    route.fulfill({
+      json: jobs,
+      headers: { "access-control-allow-origin": "*" },
+    }),
+  );
+  await page.route("**/problems/" + problemId, (route) => {
+    if (route.request().method() === "OPTIONS")
+      return route.fulfill({
+        status: 200,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "DELETE",
+        },
+      });
+    jobs = jobs.filter((job) => job.id !== problemId);
+    return route.fulfill({
+      status: 202,
+      json: { id: problemId, status: "deleted", cleanup_pending: true },
+      headers: { "access-control-allow-origin": "*" },
+    });
+  });
+  await page.goto("/");
+  await expect(
+    page.getByRole("img", { name: "Latest job photo" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: ".tmp/jobs-dashboard-phone.png",
+    fullPage: true,
+  });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(
+    page.getByText("Your home, in focus.", { exact: true }),
+  ).toHaveCSS("color", "rgb(237, 247, 242)");
+  await page.screenshot({
+    path: ".tmp/jobs-dashboard-dark-phone.png",
+    fullPage: true,
+  });
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.getByPlaceholder("Search jobs").fill("garage");
+  await expect(
+    page.getByRole("link", { name: "Open Garage floor", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open Kitchen water stain", exact: true }),
+  ).toHaveCount(0);
+  await page.getByPlaceholder("Search jobs").fill("");
+  await page.getByTestId("job-filter").selectOption("attention");
+  await expect(
+    page.getByRole("link", { name: "Open Garage floor", exact: true }),
+  ).toHaveCount(0);
+  await page.getByTestId("job-filter").selectOption("all");
+  await page.getByTestId("delete-job-" + problemId).click();
+  await page.getByTestId("confirm-delete-job").click();
+  await expect(
+    page.getByRole("link", { name: "Open Garage floor", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Open Kitchen water stain", exact: true }),
+  ).toBeVisible();
 });

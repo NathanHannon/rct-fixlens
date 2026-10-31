@@ -22,9 +22,15 @@ import {
   Disclosure,
   Notice,
   Section,
+  Panel,
+  StatusBadge,
 } from "@/components/fixlens-ui";
+import { DeleteJob } from "@/components/delete-job";
+import { JobStorage } from "@/components/job-storage";
+import { CapturePhoto } from "@/components/capture-photo";
 import { Spacing, MaxContentWidth } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
+import { calibrationLabel } from "@/lib/reference-size";
 
 export default function ProblemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -126,18 +132,14 @@ export default function ProblemScreen() {
                   instructions are unavailable.
                 </Notice>
               ) : null}
-              <Section>
-                <Copy
-                  variant="caption"
-                  style={{
-                    color:
-                      report.urgency === "pro_now"
-                        ? theme.warning
-                        : theme.accent,
-                  }}
-                >
-                  {urgencyLabels[report.urgency]}
-                </Copy>
+              <Panel>
+                <StatusBadge
+                  label={urgencyLabels[report.urgency]}
+                  warning={
+                    report.urgency === "pro_now" ||
+                    report.urgency === "fix_soon"
+                  }
+                />
                 <Copy variant="title">{report.verdict}</Copy>
                 {report.likely_cause ? (
                   <Copy muted>{report.likely_cause}</Copy>
@@ -153,7 +155,12 @@ export default function ProblemScreen() {
                     </Copy>
                   </Disclosure>
                 ) : null}
-              </Section>
+                <CapturePhoto
+                  key={report.capture_id}
+                  problemId={id}
+                  captureId={report.capture_id}
+                />
+              </Panel>
               {report.pro && (report.safety_override || !report.diy) ? (
                 <Section>
                   <Copy variant="headline">Call a professional</Copy>
@@ -208,7 +215,7 @@ export default function ProblemScreen() {
             <Copy variant="headline">How is it changing?</Copy>
             <Copy muted>
               {problem.latest_measurement?.calibrated_area_mm2 != null
-                ? `Approximately ${(problem.latest_measurement.calibrated_area_mm2 / 100).toPrecision(2)} cm² of highlighted surface. ${problem.latest_measurement.calibration?.method === "reference_card" ? "Calibrated using a reference card." : "Estimated using phone surface tracking."} Accuracy depends on the highlight, calibration, and a flat surface. Crack width has not been measured.`
+                ? `Approximately ${(problem.latest_measurement.calibrated_area_mm2 / 100).toPrecision(2)} cm² of highlighted surface. Calibrated using ${calibrationLabel(problem.latest_measurement.calibration?.method ?? "")}. Accuracy depends on the highlight, calibration, and a flat surface. Crack width has not been measured.`
                 : "No physical size estimate is available for this capture."}
             </Copy>
             {delta ? (
@@ -266,6 +273,17 @@ export default function ProblemScreen() {
               />
             </Disclosure>
           ) : null}
+          <Panel>
+            <Copy variant="headline">Manage job</Copy>
+            <JobStorage id={id} />
+            <DeleteJob
+              id={id}
+              title={problem.title}
+              onDeleted={() =>
+                router.dismissTo({ pathname: "/", params: { deleted: "1" } })
+              }
+            />
+          </Panel>
         </>
       ) : null}
     </ScrollView>

@@ -22,7 +22,7 @@ export default function RootLayout() {
           screenOptions={{
             headerShadowVisible: false,
             headerTintColor: theme.accent,
-            headerStyle: { backgroundColor: theme.background },
+            headerStyle: { backgroundColor: theme.surface },
             contentStyle: { backgroundColor: theme.background },
           }}
         >

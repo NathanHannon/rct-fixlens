@@ -26,6 +26,54 @@ export function Copy({
 export function Section({ children }: PropsWithChildren) {
   return <View style={{ gap: Spacing.three }}>{children}</View>;
 }
+export function Panel({ children }: PropsWithChildren) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        padding: Spacing.three,
+        gap: Spacing.three,
+        borderRadius: Radius.large,
+        borderCurve: "continuous",
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderColor: theme.border,
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+export function StatusBadge({
+  label,
+  warning = false,
+}: {
+  label: string;
+  warning?: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        alignSelf: "flex-start",
+        paddingHorizontal: Spacing.three,
+        paddingVertical: Spacing.one,
+        borderRadius: Radius.pill,
+        backgroundColor: warning ? theme.warningSurface : theme.accentSurface,
+      }}
+    >
+      <Copy
+        variant="caption"
+        style={{
+          color: warning ? theme.warning : theme.accent,
+          fontWeight: "600",
+        }}
+      >
+        {label}
+      </Copy>
+    </View>
+  );
+}
 export function Disclosure({
   label,
   children,
@@ -77,21 +125,29 @@ export function Action({
   disabled = false,
   secondary = false,
   testID,
+  danger = false,
+  text = false,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   secondary?: boolean;
   testID?: string;
+  danger?: boolean;
+  text?: boolean;
 }) {
   const theme = useTheme();
   return (
-    <Host matchContents ignoreSafeArea="all" seedColor={theme.accent}>
+    <Host
+      matchContents
+      ignoreSafeArea="all"
+      seedColor={danger ? theme.danger : theme.accent}
+    >
       <Button
         label={label}
         onPress={onPress}
         disabled={disabled}
-        variant={secondary ? "outlined" : "filled"}
+        variant={text ? "text" : secondary ? "outlined" : "filled"}
         style={{ width: "100%", paddingVertical: Spacing.two }}
         testID={testID}
       />

@@ -23,6 +23,7 @@ export const hazards = {
 } as const;
 export type Hazard = keyof typeof hazards;
 export interface Problem {
+  latest_capture?: { id: string; photo_url: string } | null;
   id: string;
   title: string;
   category: Category;
@@ -30,6 +31,17 @@ export interface Problem {
   status: "active" | "monitoring" | "resolved" | "archived";
   current_urgency: Urgency | null;
   created_at: string;
+}
+export interface JobFiles {
+  photos: number;
+  outlines: number;
+  previews: number;
+  bytes: number;
+}
+export interface JobDeletion {
+  id: string;
+  status: "deleted" | "deleting";
+  cleanup_pending: boolean;
 }
 export interface Report {
   id: string;
@@ -130,7 +142,7 @@ export interface SegmentationPreview {
 }
 
 export interface CalibrationInput {
-  method: "reference_card" | "arkit_plane" | "arcore_plane";
+  method: "reference_card" | "known_rectangle" | "arkit_plane" | "arcore_plane";
   points: SelectionPoint[];
   width_mm: number;
   height_mm: number;

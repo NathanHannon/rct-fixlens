@@ -40,6 +40,7 @@ import { tracingStrokes, type MaskEdit } from "@/lib/mask-edit";
 import { uploadPhoto } from "@/lib/upload";
 import { PhotoCalibration } from "@/components/photo-calibration";
 import { canMeasure, captureMeasuredPhoto } from "@/lib/ar-capture";
+import { calibrationLabel } from "@/lib/reference-size";
 
 export default function CaptureScreen() {
   const { problemId } = useLocalSearchParams<{ problemId?: string }>();
@@ -388,7 +389,7 @@ export default function CaptureScreen() {
                 />
               ) : null}
               <Action
-                label="Redraw area"
+                label="Adjust description or area"
                 secondary
                 disabled={busy}
                 onPress={redraw}
@@ -414,6 +415,34 @@ export default function CaptureScreen() {
                   />
                 </Column>
               </Host>
+              <Host matchContents ignoreSafeArea="all" seedColor={theme.accent}>
+                <Column spacing={Spacing.two} style={{ width: "100%" }}>
+                  <NativeText
+                    textStyle={{ ...Typography.body, color: theme.text }}
+                  >
+                    Describe what to highlight (optional)
+                  </NativeText>
+                  <TextInput
+                    value={observations}
+                    placeholder="Thin gray scuff near the light, not the whole ceiling"
+                    multiline
+                    numberOfLines={3}
+                    maxLength={1800}
+                    editable={!busy}
+                    placeholderTextColor={theme.textSecondary}
+                    textStyle={{ color: theme.text }}
+                    style={{
+                      padding: Spacing.three,
+                      width: "100%",
+                      backgroundColor: theme.surface,
+                    }}
+                  />
+                </Column>
+              </Host>
+              <Copy variant="caption" muted>
+                Describe the mark's color, shape, and location, and anything to
+                leave out. Your description and brush guide the highlight.
+              </Copy>
               <Action
                 label={phase ? phase + "…" : "Preview highlight"}
                 disabled={busy || !selection}
@@ -465,18 +494,6 @@ export default function CaptureScreen() {
                         </Picker>
                       </>
                     ) : null}
-                    <NativeText textStyle={Typography.body}>
-                      Anything else?
-                    </NativeText>
-                    <TextInput
-                      value={observations}
-                      placeholder="When did it appear? Has it changed?"
-                      multiline
-                      numberOfLines={3}
-                      maxLength={1800}
-                      editable={!locked}
-                      style={{ padding: Spacing.three, width: "100%" }}
-                    />
                   </Column>
                 </Host>
               </Disclosure>
@@ -528,16 +545,16 @@ export default function CaptureScreen() {
               >
                 <Copy muted>
                   {photo.calibration
-                    ? photo.calibration.method === "reference_card"
-                      ? "Using your reference card."
-                      : "Using phone surface tracking."
-                    : "Include a standard plastic card on the same surface, then mark its corners. You can also continue without measurements."}
+                    ? "Using " +
+                      calibrationLabel(photo.calibration.method) +
+                      "."
+                    : "Use a standard card or a rectangle with measured dimensions already visible on the same flat surface. You can also continue without measurements."}
                 </Copy>
                 <Action
                   label={
                     photo.calibration
                       ? "Change size reference"
-                      : "Add a reference card"
+                      : "Add size reference"
                   }
                   secondary
                   disabled={busy}
