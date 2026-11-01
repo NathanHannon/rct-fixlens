@@ -51,7 +51,9 @@
           "granularPermissions": [],
           "isAccessMediaLocationEnabled": false
         }
-      ]
+      ],
+      "expo-image",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
