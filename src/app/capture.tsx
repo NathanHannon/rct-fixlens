@@ -440,7 +440,7 @@ export default function CaptureScreen() {
                 </Column>
               </Host>
               <Copy variant="caption" muted>
-                Describe the mark's color, shape, and location, and anything to
+                Describe the mark’s color, shape, and location, and anything to
                 leave out. Your description and brush guide the highlight.
               </Copy>
               <Action

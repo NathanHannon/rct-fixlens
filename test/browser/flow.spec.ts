@@ -281,6 +281,18 @@ async function drawStroke(page: Page) {
     page.getByText("Preview highlight", { exact: true }),
   ).toBeEnabled();
 }
+async function openSavedJob(page: Page) {
+  await page.route("**/problems", (route) =>
+    route.fulfill({
+      json: [problem],
+      headers: { "access-control-allow-origin": "*" },
+    }),
+  );
+  await page.goto("/");
+  await page
+    .getByRole("link", { name: "Open " + problem.title, exact: true })
+    .click();
+}
 async function choosePhoto(page: Page, details = true) {
   await page.getByText("Check a problem", { exact: true }).click();
   const chooser = page.waitForEvent("filechooser");
@@ -1053,6 +1065,132 @@ test("cloud files can clear temporary previews without deleting the job or its s
     page.getByText("Mock assessment: surface damage", { exact: true }),
   ).toBeVisible();
 });
+test("repair search opens a real Maps query only on tap, without sharing the assessment", async ({
+  page,
+}) => {
+  await backend(page);
+  await page.route("**/problems/" + problemId, (route) =>
+    route.fulfill({
+      headers: { "access-control-allow-origin": "*" },
+      json: {
+        ...problem,
+        latest_measurement: null,
+        latest_report: {
+          ...report,
+          category: "crack",
+          safety_override: false,
+          urgency: "fix_soon",
+          red_flags: [],
+          pro: {
+            trade: "Concrete repair contractor",
+            what_to_tell_them:
+              "Private assessment notes should not leave the app.",
+          },
+        },
+        delta_summary: null,
+      },
+    }),
+  );
+  const searches: string[] = [];
+  await page.route("https://www.google.com/maps/**", async (route) => {
+    searches.push(route.request().url());
+    await route.fulfill({
+      contentType: "text/html",
+      body: "<h1>Maps search destination</h1>",
+    });
+  });
+  await openSavedJob(page);
+  await page
+    .getByRole("button", { name: "Find repair help", exact: true })
+    .click();
+  await expect(page.getByTestId("repair-trade")).toHaveValue(
+    "Concrete repair contractor",
+  );
+  await expect(page.getByTestId("repair-area")).toHaveValue("");
+  await page.getByTestId("repair-area").fill("Cambridge, MA");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(searches).toHaveLength(0);
+  await page
+    .getByRole("button", { name: "Find repair help", exact: true })
+    .click();
+  await expect(page.getByTestId("repair-area")).toHaveValue("Cambridge, MA");
+  await page.getByTestId("open-repair-maps").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: ".tmp/repair-help-phone.png", fullPage: true });
+  await page.getByTestId("open-repair-maps").click();
+  await expect(
+    page.getByRole("heading", { name: "Maps search destination" }),
+  ).toBeVisible();
+  expect(searches).toHaveLength(1);
+  const url = new URL(searches[0]);
+  expect(url.searchParams.get("query")).toBe(
+    "Concrete repair contractor in Cambridge, MA",
+  );
+  expect([...url.searchParams.keys()]).toEqual(["api", "query"]);
+  expect(searches[0]).not.toContain(problemId);
+  expect(searches[0]).not.toContain("Private");
+  expect(searches[0]).not.toContain("Basement");
+});
+
+test("repair search preserves invalid input for correction and can search nearby from a short screen", async ({
+  page,
+}) => {
+  await backend(page);
+  await page.route("**/problems/" + problemId, (route) =>
+    route.fulfill({
+      headers: { "access-control-allow-origin": "*" },
+      json: {
+        ...problem,
+        latest_measurement: null,
+        latest_report: {
+          ...report,
+          category: "appliance_error",
+          safety_override: false,
+          urgency: "monitor",
+          red_flags: [],
+          pro: null,
+        },
+        delta_summary: null,
+      },
+    }),
+  );
+  let query = "";
+  await page.route("https://www.google.com/maps/**", async (route) => {
+    query = new URL(route.request().url()).searchParams.get("query")!;
+    await route.fulfill({
+      contentType: "text/html",
+      body: "<h1>Nearby repair results</h1>",
+    });
+  });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.setViewportSize({ width: 390, height: 580 });
+  await openSavedJob(page);
+  await page
+    .getByRole("button", { name: "Find repair help", exact: true })
+    .click();
+  await expect(page.getByTestId("repair-trade")).toHaveValue(
+    "appliance repair technician",
+  );
+  await page.getByTestId("repair-trade").fill("  ");
+  await page.getByTestId("open-repair-maps").click();
+  await expect(
+    page.getByText("Enter the type of repair professional to search for.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(query).toBe("");
+  await page.getByTestId("repair-trade").fill("Appliance repair");
+  await page.getByTestId("open-repair-maps").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: ".tmp/repair-help-dark-phone.png",
+    fullPage: true,
+  });
+  await page.getByTestId("open-repair-maps").click();
+  await expect(
+    page.getByRole("heading", { name: "Nearby repair results" }),
+  ).toBeVisible();
+  expect(query).toBe("Appliance repair near me");
+});
+
 test("saved jobs show thumbnails and support search, status filters, and deletion from the list", async ({
   page,
 }) => {

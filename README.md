@@ -103,6 +103,12 @@ Before **Preview highlight**, **Describe what to highlight (optional)** accepts 
 
 From a preview, **Adjust description or area** lets the user refine the description and/or brush, then prepare another preview using the existing uploaded photo and capture. The description remains editable after an unsuccessful preview. Empty descriptions are allowed; descriptions do not establish scale or override visual mask checks. No schema migration or additional model call is required.
 
+## Finding repair professionals
+
+Reports include **Find repair help**. The sheet suggests the assessment's professional trade; users can edit it and optionally enter a city or ZIP/postal code. Generic trades use the report category or flagged specialty as a fallback. Room notes such as “Basement” are never used as a geographic address. The form preserves its draft when canceled or when opening Maps fails.
+
+**Open results in Google Maps** sends only the visible repair type and search area to [Google Maps search](https://developers.google.com/maps/documentation/urls/get-started), where business listings and the map appear. With no area, the query asks for nearby results; Maps controls its own location access. FixLens requests no location permission, stores no search area, shares no photo/report/job ID, makes no extra model call and contacts no business. No new dependency, API key, backend endpoint or native build is required. Listings are supplied by Maps and are not vetted by FixLens. Search results currently open in the Maps app or browser; an in-app business list and embedded map would need a places-data integration.
+
 ## Saved-job management
 
 Home shows photo thumbnails, urgency badges, saved-job counts, search and attention/monitoring filters. Reports include the saved photo and an optional damage-outline overlay. Shared color/surface tokens support light and dark appearance.

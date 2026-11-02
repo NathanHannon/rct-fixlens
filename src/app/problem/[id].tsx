@@ -28,6 +28,7 @@ import {
 import { DeleteJob } from "@/components/delete-job";
 import { JobStorage } from "@/components/job-storage";
 import { CapturePhoto } from "@/components/capture-photo";
+import { FindRepairHelp } from "@/components/find-repair-help";
 import { Spacing, MaxContentWidth } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { calibrationLabel } from "@/lib/reference-size";
@@ -202,6 +203,7 @@ export default function ProblemScreen() {
                   ))}
                 </Section>
               ) : null}
+              <FindRepairHelp key={report.id} report={report} />
             </>
           ) : (
             <Section>
