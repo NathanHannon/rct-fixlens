@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
-import { Host, Picker } from "@expo/ui";
+import { SegmentedControl } from "@expo/ui/community/segmented-control";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedProps,
@@ -20,6 +20,12 @@ import {
 import { Action, Copy } from "@/components/fixlens-ui";
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const MAX_STROKES = 16;
+const BRUSHES = [
+  { label: "Fine", width: 14 },
+  { label: "Medium", width: 28 },
+  { label: "Wide", width: 44 },
+];
+const BRUSH_LABELS = BRUSHES.map(({ label }) => label);
 export function PhotoSelection({
   photo,
   selection,
@@ -27,7 +33,10 @@ export function PhotoSelection({
   strokes,
   onStrokesChange,
   disabled = false,
+  reviewing = false,
   maskUrl,
+  outlineUrl,
+  showFill = true,
   onMaskReady,
   onMaskError,
 }: {
@@ -37,13 +46,18 @@ export function PhotoSelection({
   strokes: BrushStroke[];
   onStrokesChange: (strokes: BrushStroke[]) => void;
   disabled?: boolean;
+  reviewing?: boolean;
   maskUrl?: string | null;
+  outlineUrl?: string | null;
+  showFill?: boolean;
   onMaskReady?: () => void;
   onMaskError?: () => void;
 }) {
   const theme = useTheme();
+  const canDraw = !disabled && !reviewing;
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [brush, setBrush] = useState("28");
+  const [brush, setBrush] = useState(1);
+  const brushWidth = BRUSHES[brush].width;
   const activePath = useSharedValue("");
   const activePoints = useSharedValue<SelectionPoint[]>([]);
   const activeRadius = useSharedValue(1);
@@ -69,12 +83,12 @@ export function PhotoSelection({
     };
   }
   const gesture = Gesture.Pan()
-    .enabled(!disabled && size.width > 0 && strokes.length < MAX_STROKES)
+    .enabled(canDraw && size.width > 0 && strokes.length < MAX_STROKES)
     .minDistance(0)
     .maxPointers(1)
     .onBegin((event) => {
       const p = point(event.x, event.y);
-      activeRadius.set(((Number(brush) / 2) * photo.width) / size.width);
+      activeRadius.set(((brushWidth / 2) * photo.width) / size.width);
       activePoints.set([p]);
       activePath.set(`M${p.x},${p.y}L${p.x + 0.01},${p.y}`);
     })
@@ -101,8 +115,35 @@ export function PhotoSelection({
     strokeWidth: activeRadius.get() * 2,
   }));
   return (
-    <View style={{ gap: Spacing.three, width: "100%" }}>
-      <View style={{ width: "100%", alignItems: "center" }}>
+    <View
+      style={{
+        width: "100%",
+        padding: Spacing.one,
+        borderRadius: Radius.large,
+        borderCurve: "continuous",
+        borderWidth: 1,
+        borderColor: theme.border,
+        backgroundColor: theme.surface,
+      }}
+    >
+      {canDraw ? (
+        <Copy
+          variant="caption"
+          muted
+          style={{ paddingHorizontal: Spacing.two, paddingVertical: Spacing.two }}
+        >
+          Swipe along a crack, or brush across a stain or scuff. A rough mark is
+          enough.
+        </Copy>
+      ) : null}
+      <View
+        style={{
+          alignItems: "center",
+          backgroundColor: theme.backgroundElement,
+          borderRadius: Radius.medium,
+          borderCurve: "continuous",
+        }}
+      >
         <GestureDetector gesture={gesture} touchAction="none">
           <View
             testID="photo-selection"
@@ -119,6 +160,7 @@ export function PhotoSelection({
               aspectRatio: photo.width / photo.height,
               overflow: "hidden",
               borderRadius: Radius.medium,
+              borderCurve: "continuous",
               backgroundColor: theme.backgroundElement,
             }}
           >
@@ -129,7 +171,37 @@ export function PhotoSelection({
               accessibilityLabel="Selected problem photo"
               style={{ position: "absolute", width: "100%", height: "100%" }}
             />
-            {maskUrl ? (
+            {outlineUrl ? (
+              <>
+                {maskUrl && showFill ? (
+                  <Image
+                    pointerEvents="none"
+                    testID="outline-fill"
+                    source={{ uri: maskUrl }}
+                    cachePolicy="none"
+                    contentFit="contain"
+                    accessible={false}
+                    style={{
+                      position: "absolute",
+                      width: "100%",
+                      height: "100%",
+                      opacity: 0.22,
+                    }}
+                  />
+                ) : null}
+                <Image
+                  pointerEvents="none"
+                  key={outlineUrl}
+                  source={{ uri: outlineUrl }}
+                  cachePolicy="none"
+                  contentFit="contain"
+                  accessibilityLabel="Damage outline"
+                  onLoad={onMaskReady}
+                  onError={onMaskError}
+                  style={{ position: "absolute", width: "100%", height: "100%" }}
+                />
+              </>
+            ) : maskUrl ? (
               <Image
                 pointerEvents="none"
                 key={maskUrl}
@@ -141,7 +213,7 @@ export function PhotoSelection({
                 onError={onMaskError}
                 style={{ position: "absolute", width: "100%", height: "100%" }}
               />
-            ) : (
+            ) : !reviewing ? (
               <Svg
                 pointerEvents="none"
                 width="100%"
@@ -150,7 +222,7 @@ export function PhotoSelection({
                 style={{ position: "absolute" }}
               >
                 <G
-                  opacity={0.5}
+                  opacity={0.35}
                   stroke={theme.accent}
                   fill="none"
                   strokeLinecap="round"
@@ -177,27 +249,39 @@ export function PhotoSelection({
                   />
                 ) : null}
               </Svg>
-            )}
+            ) : null}
           </View>
         </GestureDetector>
       </View>
-      {!disabled ? (
-        <>
-          <Copy variant="caption" muted>
+      {canDraw ? (
+        <View
+          style={{
+            paddingHorizontal: Spacing.two,
+            paddingTop: Spacing.two,
+            gap: Spacing.two,
+          }}
+        >
+          <Copy variant="caption" style={{ fontWeight: "600" }}>
             Brush size
           </Copy>
-          <Host matchContents ignoreSafeArea="all" seedColor={theme.accent}>
-            <Picker selectedValue={brush} onValueChange={setBrush}>
-              <Picker.Item value="14" label="Fine" />
-              <Picker.Item value="28" label="Medium" />
-              <Picker.Item value="44" label="Wide" />
-            </Picker>
-          </Host>
+          <SegmentedControl
+            accessibilityLabel="Brush size"
+            values={BRUSH_LABELS}
+            selectedIndex={brush}
+            onChange={({ nativeEvent }) =>
+              setBrush(nativeEvent.selectedSegmentIndex)
+            }
+          />
+          {strokes.length >= MAX_STROKES ? (
+            <Copy variant="caption" muted>
+              Stroke limit reached. Undo or clear to keep painting.
+            </Copy>
+          ) : null}
           <View style={{ flexDirection: "row", gap: Spacing.two }}>
             <View style={{ flex: 1 }}>
               <Action
                 label="Undo stroke"
-                secondary
+                text
                 disabled={!strokes.length}
                 onPress={() => update(strokes.slice(0, -1))}
               />
@@ -205,18 +289,13 @@ export function PhotoSelection({
             <View style={{ flex: 1 }}>
               <Action
                 label="Clear selection"
-                secondary
+                text
                 disabled={!selection}
                 onPress={() => update([])}
               />
             </View>
           </View>
-          <Copy variant="caption" muted>
-            {strokes.length >= MAX_STROKES
-              ? "Stroke limit reached. Undo or clear to paint again."
-              : "Paint directly over the damage. Add strokes to cover its shape."}
-          </Copy>
-        </>
+        </View>
       ) : null}
     </View>
   );

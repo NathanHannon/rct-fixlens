@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState, type ComponentRef } from "react";
-import { Keyboard, ScrollView } from "react-native";
+import { Keyboard, ScrollView, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import {
   Host,
   Column,
   Picker,
   Switch,
-  TextInput,
-  Text as NativeText,
-  useNativeState,
 } from "@expo/ui";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,9 +24,15 @@ import {
   Copy,
   Disclosure,
   Notice,
+  Panel,
   Section,
 } from "@/components/fixlens-ui";
-import { MaxContentWidth, Spacing, Typography } from "@/constants/theme";
+import {
+  CaptureField,
+  CaptureIllustration,
+  CaptureProgress,
+} from "@/components/capture-layout";
+import { MaxContentWidth, Radius, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { CaptureSession, type Phase } from "@/lib/capture-session";
 import { pickPhoto, preparePhoto } from "@/lib/photos";
@@ -65,18 +68,21 @@ export default function CaptureScreen() {
   const [preview, setPreview] = useState<SegmentationPreview>();
   const [editing, setEditing] = useState<MaskEdit | null>(null);
   const [maskReady, setMaskReady] = useState(false);
+  const [outlineFailed, setOutlineFailed] = useState(false);
+  const [showFill, setShowFill] = useState(true);
   const [assessing, setAssessing] = useState(false);
   const [category, setCategory] = useState<Category>("other");
   const [flags, setFlags] = useState<Hazard[]>([]);
-  const location = useNativeState("");
-  const problemType = useNativeState("");
-  const observations = useNativeState("");
+  const [location, setLocation] = useState("");
+  const [problemType, setProblemType] = useState("");
+  const [observations, setObservations] = useState("");
   const [phase, setPhase] = useState<Phase>();
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState("");
   const [locked, setLocked] = useState(false);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const busy = Boolean(phase) || picking;
+  const outlineUrl = outlineFailed ? null : preview?.outline_url;
 
   // Recover the system picker result if Android recreated the activity.
   useEffect(() => {
@@ -133,19 +139,19 @@ export default function CaptureScreen() {
     setAssessing(assess);
     Keyboard.dismiss();
     try {
-      const description = problemType.value.trim();
+      const description = problemType.trim();
       const draft = {
         photo,
         category,
         title:
-          `${description || (category === "other" ? "Home check" : categories[category])}${location.value.trim() ? ` · ${location.value.trim()}` : ""}`.slice(
+          `${description || (category === "other" ? "Home check" : categories[category])}${location.trim() ? ` · ${location.trim()}` : ""}`.slice(
             0,
             200,
           ),
-        location: location.value.trim(),
+        location: location.trim(),
         context: [
           description ? `User-described problem: ${description}` : "",
-          observations.value.trim(),
+          observations.trim(),
         ]
           .filter(Boolean)
           .join("\n\n"),
@@ -164,7 +170,8 @@ export default function CaptureScreen() {
         if (!edit) {
           setPreview(result);
           setEditing(null);
-          setMaskReady(result.is_mock || !result.mask_url);
+          setOutlineFailed(false);
+          setMaskReady(result.is_mock || (!result.mask_url && !result.outline_url));
           scroll.current?.scrollTo({ y: 0 });
           return;
         }
@@ -203,6 +210,7 @@ export default function CaptureScreen() {
       contentInsetAdjustmentBehavior="automatic"
       automaticallyAdjustKeyboardInsets
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       contentContainerStyle={{
         padding: Spacing.four,
         gap: Spacing.three,
@@ -219,21 +227,26 @@ export default function CaptureScreen() {
           headerBackVisible: !phase,
         }}
       />
-      <Copy variant="caption" muted>
-        {!photo
-          ? "1 / PHOTO"
-          : preview || editing
-            ? "3 / REVIEW"
-            : "2 / MARK THE PROBLEM"}
-      </Copy>
+      <CaptureProgress step={!photo ? 0 : preview || editing ? 2 : 1} />
       {!photo ? (
         <Section>
-          <Copy variant="title">Show us what looks wrong.</Copy>
-          <Copy muted>
-            {problemId
-              ? "Match the previous angle, distance, and lighting."
-              : "Take a clear photo with a little surrounding context."}
-          </Copy>
+          <View style={{
+            gap: Spacing.two,
+            padding: Spacing.four,
+            backgroundColor: theme.accentSurface,
+            borderRadius: Radius.large,
+            borderCurve: "continuous",
+          }}>
+            <CaptureIllustration />
+            <Copy variant="display">
+              {problemId ? "Look again." : "Show what’s wrong."}
+            </Copy>
+            <Copy muted>
+              {problemId
+                ? "Match the previous angle, distance, and lighting."
+                : "Take a clear photo with a little of the surrounding area in frame."}
+            </Copy>
+          </View>
           <Action
             label={picking ? "Opening photo…" : "Take a photo"}
             disabled={busy}
@@ -253,10 +266,10 @@ export default function CaptureScreen() {
               onPress={() => void choose(true, true)}
             />
           ) : null}
-          <Copy variant="caption" muted>
-            For optional size estimates, include a standard plastic card flat
-            beside the damage.
-          </Copy>
+          <Notice>
+            For a size estimate, place a standard plastic card flat beside the
+            damage before taking the photo.
+          </Notice>
         </Section>
       ) : calibrating ? (
         <PhotoCalibration
@@ -284,12 +297,12 @@ export default function CaptureScreen() {
         />
       ) : (
         <Section>
-          <Copy variant="headline">
+          <Copy variant="title">
             {preview
               ? preview.status === "unavailable"
                 ? "We couldn't isolate the mark."
                 : "Does the highlight cover the problem?"
-              : "Brush over what concerns you."}
+              : "Mark the damage."}
           </Copy>
           <PhotoSelection
             key={photo.uri}
@@ -298,10 +311,17 @@ export default function CaptureScreen() {
             strokes={strokes}
             onStrokesChange={setStrokes}
             disabled={busy || Boolean(preview)}
+            reviewing={Boolean(preview)}
             maskUrl={preview?.mask_url}
+            outlineUrl={outlineUrl}
+            showFill={showFill}
             onMaskReady={() => setMaskReady(true)}
             onMaskError={() => {
               setMaskReady(false);
+              if (outlineUrl && preview?.mask_url) {
+                setOutlineFailed(true);
+                return;
+              }
               setError("The highlight could not load. Preview the area again.");
             }}
             onChange={(value) => {
@@ -319,10 +339,26 @@ export default function CaptureScreen() {
                   Draw an outline, or continue with a photo-only assessment.
                 </Notice>
               ) : (
-                <Copy muted>
-                  Check the highlighted area. Edit it if it misses damage or
-                  includes healthy surface.
-                </Copy>
+                <>
+                  <Copy muted>
+                    Check that the outline follows the damage. Edit it if it
+                    misses part of the mark or includes surrounding surface.
+                  </Copy>
+                  {outlineUrl && preview.mask_url ? (
+                    <Host
+                      matchContents={{ vertical: true }}
+                      style={{ width: "100%" }}
+                      ignoreSafeArea="all"
+                      seedColor={theme.accent}
+                    >
+                      <Switch
+                        label="Shade inside the outline"
+                        value={showFill}
+                        onValueChange={setShowFill}
+                      />
+                    </Host>
+                  ) : null}
+                </>
               )}
               {preview.is_mock ? (
                 <Notice>
@@ -338,6 +374,7 @@ export default function CaptureScreen() {
                       : "Automatic outline"}
                 </Copy>
               ) : null}
+              {error ? <Notice warning>{error}</Notice> : null}
               {preview.status === "unavailable" ? (
                 <>
                   <Action
@@ -380,7 +417,7 @@ export default function CaptureScreen() {
                   />
                 </>
               )}
-              {preview.mask_url && !maskReady && error ? (
+              {(preview.mask_url || outlineUrl) && !maskReady && error ? (
                 <Action
                   label="Preview highlight again"
                   secondary
@@ -390,7 +427,7 @@ export default function CaptureScreen() {
               ) : null}
               <Action
                 label="Adjust description or area"
-                secondary
+                text
                 disabled={busy}
                 onPress={redraw}
               />
@@ -401,102 +438,29 @@ export default function CaptureScreen() {
             </>
           ) : (
             <>
-              <Host matchContents ignoreSafeArea="all" seedColor={theme.accent}>
-                <Column spacing={Spacing.two} style={{ width: "100%" }}>
-                  <NativeText textStyle={Typography.body}>
-                    What is it? (optional)
-                  </NativeText>
-                  <TextInput
-                    value={problemType}
-                    placeholder="Ceiling scuff, peeling paint, chipped tile"
-                    maxLength={120}
-                    editable={!locked}
-                    style={{ padding: Spacing.three, width: "100%" }}
-                  />
-                </Column>
-              </Host>
-              <Host matchContents ignoreSafeArea="all" seedColor={theme.accent}>
-                <Column spacing={Spacing.two} style={{ width: "100%" }}>
-                  <NativeText
-                    textStyle={{ ...Typography.body, color: theme.text }}
-                  >
-                    Describe what to highlight (optional)
-                  </NativeText>
-                  <TextInput
-                    value={observations}
-                    placeholder="Thin gray scuff near the light, not the whole ceiling"
-                    multiline
-                    numberOfLines={3}
-                    maxLength={1800}
-                    editable={!busy}
-                    placeholderTextColor={theme.textSecondary}
-                    textStyle={{ color: theme.text }}
-                    style={{
-                      padding: Spacing.three,
-                      width: "100%",
-                      backgroundColor: theme.surface,
-                    }}
-                  />
-                </Column>
-              </Host>
-              <Copy variant="caption" muted>
-                Describe the mark’s color, shape, and location, and anything to
-                leave out. Your description and brush guide the highlight.
-              </Copy>
-              <Action
-                label={phase ? phase + "…" : "Preview highlight"}
-                disabled={busy || !selection}
-                onPress={() => void submit()}
-                testID="submit-assessment"
-              />
-              <Action
-                label={
-                  strokes.length ? "Use my tracing" : "Draw my own outline"
-                }
-                secondary
-                disabled={busy}
-                onPress={drawOutline}
-              />
-              <Disclosure label="More details (optional)">
-                <Host
-                  matchContents
-                  ignoreSafeArea="all"
-                  seedColor={theme.accent}
-                >
-                  <Column spacing={Spacing.three} style={{ width: "100%" }}>
-                    {!problemId ? (
-                      <>
-                        <NativeText textStyle={Typography.body}>
-                          Where is it?
-                        </NativeText>
-                        <TextInput
-                          value={location}
-                          placeholder="Basement, north wall"
-                          maxLength={1000}
-                          editable={!locked}
-                          style={{ padding: Spacing.three, width: "100%" }}
-                        />
-                        <NativeText textStyle={Typography.body}>
-                          Category
-                        </NativeText>
-                        <Picker
-                          selectedValue={category}
-                          enabled={!locked}
-                          onValueChange={setCategory}
-                        >
-                          {Object.entries(categories).map(([value, label]) => (
-                            <Picker.Item
-                              key={value}
-                              value={value}
-                              label={label}
-                            />
-                          ))}
-                        </Picker>
-                      </>
-                    ) : null}
-                  </Column>
-                </Host>
-              </Disclosure>
+              <Panel>
+                <Copy variant="eyebrow" style={{ color: theme.accent }}>
+                  OPTIONAL PHOTO NOTES
+                </Copy>
+                <CaptureField
+                  label="What is it?"
+                  value={problemType}
+                  onChangeText={setProblemType}
+                  placeholder="Ceiling scuff, peeling paint, chipped tile"
+                  maxLength={120}
+                  editable={!locked}
+                />
+                <CaptureField
+                  label="Describe what to highlight"
+                  value={observations}
+                  onChangeText={setObservations}
+                  placeholder="Thin gray scuff near the light, not the whole ceiling"
+                  multiline
+                  maxLength={1800}
+                  editable={!busy}
+                  help="Describe the mark’s shape, color, and location, plus anything to leave out."
+                />
+              </Panel>
               <Disclosure
                 label={
                   flags.length
@@ -505,7 +469,8 @@ export default function CaptureScreen() {
                 }
               >
                 <Host
-                  matchContents
+                  matchContents={{ vertical: true }}
+                  style={{ width: "100%" }}
                   ignoreSafeArea="all"
                   seedColor={theme.accent}
                 >
@@ -536,66 +501,115 @@ export default function CaptureScreen() {
                   professional help.
                 </Notice>
               ) : null}
-              <Disclosure
-                label={
-                  photo.calibration
-                    ? "Size reference added"
-                    : "Size estimate (optional)"
-                }
-              >
-                <Copy muted>
-                  {photo.calibration
-                    ? "Using " +
-                      calibrationLabel(photo.calibration.method) +
-                      "."
-                    : "Use a standard card or a rectangle with measured dimensions already visible on the same flat surface. You can also continue without measurements."}
-                </Copy>
+              {error ? <Notice warning>{error}</Notice> : null}
+              <View style={{ gap: Spacing.one }}>
                 <Action
+                  label={phase ? phase + "…" : "Preview highlight"}
+                  disabled={busy || !selection}
+                  onPress={() => void submit()}
+                  testID="submit-assessment"
+                />
+                <Action
+                  label={strokes.length ? "Use my tracing" : "Draw my own outline"}
+                  text
+                  disabled={busy}
+                  onPress={drawOutline}
+                />
+              </View>
+              <Panel>
+                <Copy variant="eyebrow" style={{ color: theme.accent }}>
+                  CAPTURE OPTIONS
+                </Copy>
+                {!problemId ? (
+                  <Disclosure label="More details (optional)">
+                    <CaptureField
+                      label="Where is it?"
+                      value={location}
+                      onChangeText={setLocation}
+                      placeholder="Basement, north wall"
+                      maxLength={1000}
+                      editable={!locked}
+                    />
+                    <Copy>Category</Copy>
+                    <Host
+                      matchContents={{ vertical: true }}
+                      style={{ width: "100%" }}
+                      ignoreSafeArea="all"
+                      seedColor={theme.accent}
+                    >
+                      <Picker
+                        selectedValue={category}
+                        enabled={!locked}
+                        onValueChange={setCategory}
+                      >
+                        {Object.entries(categories).map(([value, label]) => (
+                          <Picker.Item key={value} value={value} label={label} />
+                        ))}
+                      </Picker>
+                    </Host>
+                  </Disclosure>
+                ) : null}
+                <Disclosure
                   label={
                     photo.calibration
-                      ? "Change size reference"
-                      : "Add size reference"
+                      ? "Size reference added"
+                      : "Size estimate (optional)"
                   }
-                  secondary
-                  disabled={busy}
-                  onPress={() => {
-                    setCalibrating(true);
-                    scroll.current?.scrollTo({ y: 0 });
-                  }}
-                />
-              </Disclosure>
-              <Disclosure label="Photo options">
-                <Action
-                  label="Use entire photo"
-                  secondary
-                  disabled={busy}
-                  onPress={() => {
-                    setStrokes([]);
-                    setSelection({
-                      x1: 0,
-                      y1: 0,
-                      x2: photo.width - 1,
-                      y2: photo.height - 1,
-                    });
-                  }}
-                />
-                {!locked ? (
-                  <>
-                    <Action
-                      label="Retake photo"
-                      secondary
-                      disabled={busy}
-                      onPress={() => void choose(true)}
-                    />
-                    <Action
-                      label="Choose a different photo"
-                      secondary
-                      disabled={busy}
-                      onPress={() => void choose(false)}
-                    />
-                  </>
-                ) : null}
-              </Disclosure>
+                >
+                  <Copy muted>
+                    {photo.calibration
+                      ? "Using " +
+                        calibrationLabel(photo.calibration.method) +
+                        "."
+                      : "Use a standard card or a rectangle with measured dimensions already visible on the same flat surface. You can also continue without measurements."}
+                  </Copy>
+                  <Action
+                    label={
+                      photo.calibration
+                        ? "Change size reference"
+                        : "Add size reference"
+                    }
+                    secondary
+                    disabled={busy}
+                    onPress={() => {
+                      setCalibrating(true);
+                      scroll.current?.scrollTo({ y: 0 });
+                    }}
+                  />
+                </Disclosure>
+                <Disclosure label="Photo options">
+                  <Action
+                    label="Use entire photo"
+                    secondary
+                    disabled={busy}
+                    onPress={() => {
+                      setStrokes([]);
+                      setSelection({
+                        x1: 0,
+                        y1: 0,
+                        x2: photo.width - 1,
+                        y2: photo.height - 1,
+                      });
+                    }}
+                  />
+                  {!locked ? (
+                    <>
+                      <Action
+                        label="Retake photo"
+                        secondary
+                        disabled={busy}
+                        onPress={() => void choose(true)}
+                      />
+                      <Action
+                        label="Choose a different photo"
+                        secondary
+                        disabled={busy}
+                        onPress={() => void choose(false)}
+                      />
+                    </>
+                  ) : null}
+                </Disclosure>
+              </Panel>
               <Copy variant="caption" muted>
                 Your photo is saved for analysis. Assessments are guidance, not
                 a professional inspection.
@@ -604,7 +618,9 @@ export default function CaptureScreen() {
           )}
         </Section>
       )}
-      {error ? <Notice warning>{error}</Notice> : null}
+      {error && (!photo || calibrating || editing) ? (
+        <Notice warning>{error}</Notice>
+      ) : null}
     </ScrollView>
   );
 }

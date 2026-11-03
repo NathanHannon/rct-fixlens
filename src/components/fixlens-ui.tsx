@@ -1,6 +1,6 @@
-import { Button, Collapsible, Host, RNHostView } from "@expo/ui";
+import { Collapsible, Host, RNHostView } from "@expo/ui";
 import { useState, type PropsWithChildren } from "react";
-import { Text, View, type TextProps } from "react-native";
+import { Pressable, Text, View, type TextProps } from "react-native";
 import { Spacing, Typography, Radius } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -81,7 +81,12 @@ export function Disclosure({
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   return (
-    <Host matchContents ignoreSafeArea="all" seedColor={theme.accent}>
+    <Host
+      matchContents={{ vertical: true }}
+      style={{ width: "100%" }}
+      ignoreSafeArea="all"
+      seedColor={theme.accent}
+    >
       <Collapsible
         isOpen={open}
         onOpenChange={setOpen}
@@ -137,20 +142,39 @@ export function Action({
   text?: boolean;
 }) {
   const theme = useTheme();
+  const color = danger ? theme.danger : theme.accent;
+  const filled = !secondary && !text;
   return (
-    <Host
-      matchContents
-      ignoreSafeArea="all"
-      seedColor={danger ? theme.danger : theme.accent}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      testID={testID}
+      style={({ pressed }) => ({
+        minHeight: 44,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: Spacing.three,
+        paddingVertical: Spacing.two,
+        borderRadius: Radius.medium,
+        borderCurve: "continuous",
+        backgroundColor: filled ? color : secondary ? theme.surface : "transparent",
+        borderWidth: secondary && !text ? 1 : 0,
+        borderColor: danger ? theme.danger : theme.border,
+        opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
+      })}
     >
-      <Button
-        label={label}
-        onPress={onPress}
-        disabled={disabled}
-        variant={text ? "text" : secondary ? "outlined" : "filled"}
-        style={{ width: "100%", paddingVertical: Spacing.two }}
-        testID={testID}
-      />
-    </Host>
+      <Copy
+        selectable={false}
+        style={{
+          color: filled ? theme.onAccent : color,
+          fontWeight: "600",
+          textAlign: "center",
+        }}
+      >
+        {label}
+      </Copy>
+    </Pressable>
   );
 }

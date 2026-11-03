@@ -134,6 +134,7 @@ export interface SegmentationPreview {
   } | null;
   token: string;
   mask_url: string | null;
+  outline_url?: string | null;
   expires_at: string;
   area_px: number | null;
   perimeter_px: number | null;

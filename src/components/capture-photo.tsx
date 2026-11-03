@@ -35,47 +35,73 @@ export function CapturePhoto({
   }, [problemId, captureId, attempt]);
   return (
     <View style={{ gap: Spacing.two }}>
-      {media && !error ? (
+      {!error ? (
         <View
           style={{
             width: "100%",
             aspectRatio: 4 / 3,
-            maxHeight: 300,
+            maxHeight: 220,
             overflow: "hidden",
             borderRadius: Radius.medium,
+            borderCurve: "continuous",
             backgroundColor: theme.backgroundElement,
+            justifyContent: "center",
+            alignItems: "center",
           }}
         >
-          <Image
-            source={{ uri: media.photo.url }}
-            contentFit="contain"
-            accessibilityLabel="Assessment photo"
-            onError={() => setError(true)}
-            style={{ width: "100%", height: "100%" }}
-          />
-          {outline && media.mask ? (
-            <Image
-              source={{ uri: media.mask.url }}
-              contentFit="contain"
-              accessibilityLabel="Saved damage outline"
-              onError={() => setOutline(false)}
-              style={{ position: "absolute", width: "100%", height: "100%" }}
-            />
-          ) : null}
+          {media ? (
+            <>
+              <Image
+                source={{ uri: media.photo.url }}
+                contentFit="contain"
+                accessibilityLabel="Assessment photo"
+                onError={() => setError(true)}
+                style={{ width: "100%", height: "100%" }}
+              />
+              {outline && media.mask ? (
+                <Image
+                  source={{ uri: media.mask.url }}
+                  contentFit="contain"
+                  accessibilityLabel="Saved damage outline"
+                  onError={() => setOutline(false)}
+                  style={{ position: "absolute", width: "100%", height: "100%" }}
+                />
+              ) : null}
+            </>
+          ) : (
+            <Copy variant="caption" muted>
+              Loading photo…
+            </Copy>
+          )}
         </View>
       ) : (
         <Copy variant="caption" muted>
-          {error ? "Photo preview unavailable." : "Loading photo…"}
+          Photo preview unavailable.
         </Copy>
       )}
-      {media?.mask && !error ? (
-        <Host matchContents ignoreSafeArea="all" seedColor={theme.accent}>
-          <Switch
-            label="Show damage outline"
-            value={outline}
-            onValueChange={setOutline}
-          />
-        </Host>
+      {media && !error ? (
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: Spacing.two,
+          }}
+        >
+          <Copy variant="caption" muted>
+            Captured photo
+          </Copy>
+          {media.mask ? (
+            <Host matchContents ignoreSafeArea="all" seedColor={theme.accent}>
+              <Switch
+                label="Show damage outline"
+                value={outline}
+                onValueChange={setOutline}
+              />
+            </Host>
+          ) : null}
+        </View>
       ) : null}
       {error ? (
         <Action

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ScrollView, RefreshControl } from "react-native";
+import { ScrollView, RefreshControl, Text, View } from "react-native";
 import {
   Stack,
   router,
@@ -29,7 +29,7 @@ import { DeleteJob } from "@/components/delete-job";
 import { JobStorage } from "@/components/job-storage";
 import { CapturePhoto } from "@/components/capture-photo";
 import { FindRepairHelp } from "@/components/find-repair-help";
-import { Spacing, MaxContentWidth } from "@/constants/theme";
+import { Spacing, MaxContentWidth, Radius } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { calibrationLabel } from "@/lib/reference-size";
 
@@ -70,6 +70,9 @@ export default function ProblemScreen() {
     }, [load]),
   );
   const report = problem?.latest_report;
+  const diy = report?.safety_override ? null : report?.diy;
+  const firstStep = diy?.steps[0];
+  const recommendedPro = report?.pro && !diy ? report.pro : null;
   const delta = deltas.find((d) => d.to_capture_id === report?.capture_id);
   const photoOnly = Boolean(
     report?.confidence_note?.startsWith(
@@ -84,8 +87,8 @@ export default function ProblemScreen() {
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
-        padding: Spacing.four,
-        gap: Spacing.four,
+        padding: Spacing.three,
+        gap: Spacing.three,
         paddingBottom: insets.bottom + Spacing.four,
         maxWidth: MaxContentWidth,
         width: "100%",
@@ -108,25 +111,8 @@ export default function ProblemScreen() {
       {!problem && loading ? <Copy muted>Loading your assessment…</Copy> : null}
       {problem ? (
         <>
-          <Copy variant="caption" muted>
-            {problem.location_note || "Location not added"} · Saved{" "}
-            {new Date(problem.created_at).toLocaleDateString()}
-          </Copy>
-          {mock ? (
-            <Notice>
-              Demo assessment · Findings, confidence, and measurements are
-              simulated. This photo has not been analyzed by a model.
-            </Notice>
-          ) : null}
           {report ? (
             <>
-              {photoOnly ? (
-                <Notice warning>
-                  Photo-based assessment. A reliable damage outline was
-                  unavailable, so size and growth measurements were not recorded
-                  for this photo.
-                </Notice>
-              ) : null}
               {report.safety_override ? (
                 <Notice warning>
                   Professional help now · A safety concern was flagged. DIY
@@ -134,55 +120,91 @@ export default function ProblemScreen() {
                 </Notice>
               ) : null}
               <Panel>
-                <StatusBadge
-                  label={urgencyLabels[report.urgency]}
-                  warning={
-                    report.urgency === "pro_now" ||
-                    report.urgency === "fix_soon"
-                  }
-                />
-                <Copy variant="title">{report.verdict}</Copy>
-                {report.likely_cause ? (
-                  <Copy muted>{report.likely_cause}</Copy>
-                ) : null}
-                <Copy variant="caption" muted>
-                  {mock ? "Demo confidence" : "Confidence"}:{" "}
-                  {Math.round(Number(report.confidence) * 100)}%
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    justifyContent: "space-between",
+                    gap: Spacing.two,
+                  }}
+                >
+                  <Copy variant="eyebrow" style={{ color: theme.accent }}>
+                    {mock ? "DEMO ASSESSMENT" : "ASSESSMENT"}
+                  </Copy>
+                  {report.safety_override ? null : (
+                    <StatusBadge
+                      label={urgencyLabels[report.urgency]}
+                      warning={
+                        report.urgency === "pro_now" ||
+                        report.urgency === "fix_soon"
+                      }
+                    />
+                  )}
+                </View>
+                <Copy variant="title" accessibilityRole="header">
+                  {report.verdict}
                 </Copy>
-                {report.confidence_note ? (
-                  <Disclosure label="Assessment details">
-                    <Copy variant="caption" muted>
-                      {report.confidence_note}
+                {recommendedPro || firstStep ? (
+                  <View
+                    style={{
+                      gap: Spacing.one,
+                      padding: Spacing.three,
+                      borderRadius: Radius.medium,
+                      backgroundColor: report.safety_override
+                        ? theme.warningSurface
+                        : theme.accentSurface,
+                    }}
+                  >
+                    <Copy variant="headline" accessibilityRole="header">
+                      {recommendedPro ? "Call a professional" : "Your next steps"}
                     </Copy>
-                  </Disclosure>
+                    <Copy>{recommendedPro?.trade ?? firstStep}</Copy>
+                  </View>
                 ) : null}
                 <CapturePhoto
                   key={report.capture_id}
                   problemId={id}
                   captureId={report.capture_id}
                 />
-              </Panel>
-              {report.pro && (report.safety_override || !report.diy) ? (
-                <Section>
-                  <Copy variant="headline">Call a professional</Copy>
-                  <Copy>{report.pro.trade}</Copy>
-                  <Copy muted>{report.pro.what_to_tell_them}</Copy>
-                </Section>
-              ) : null}
-              {report.diy && !report.safety_override ? (
-                <Section>
-                  <Copy variant="headline">Your next steps</Copy>
+                {mock ? (
                   <Copy variant="caption" muted>
-                    {report.diy.difficulty} · {report.diy.time_estimate}
+                    Demo assessment · Findings, confidence, and measurements are
+                    simulated. This photo has not been analyzed by a model.
                   </Copy>
-                  {report.diy.steps.map((step, i) => (
+                ) : null}
+                {photoOnly ? (
+                  <Notice>
+                    <Text style={{ fontWeight: "600" }}>
+                      Assessment ready · Size unavailable
+                    </Text>
+                    {"\n"}The damage outline could not be verified, so size and
+                    growth weren’t recorded for this photo.
+                  </Notice>
+                ) : null}
+              </Panel>
+              {recommendedPro ? (
+                <Panel>
+                  <Copy variant="headline" accessibilityRole="header">
+                    What to tell them
+                  </Copy>
+                  <Copy muted>{recommendedPro.what_to_tell_them}</Copy>
+                  <FindRepairHelp key={report.id} report={report} />
+                </Panel>
+              ) : null}
+              {diy ? (
+                <Disclosure label="Repair instructions">
+                  <Copy variant="caption" muted>
+                    {diy.difficulty} · {diy.time_estimate}
+                  </Copy>
+                  {diy.steps.map((step, i) => (
                     <Copy key={`${i}-${step}`}>
                       {i + 1}. {step}
                     </Copy>
                   ))}
-                  {report.diy.parts.length ? (
+                  {diy.parts.length ? (
                     <Copy muted>
-                      What you need: {report.diy.parts.join(", ")}
+                      What you need: {diy.parts.join(", ")}
                     </Copy>
                   ) : null}
                   {report.pro ? (
@@ -191,19 +213,40 @@ export default function ProblemScreen() {
                       {report.pro.what_to_tell_them}
                     </Copy>
                   ) : null}
-                </Section>
+                </Disclosure>
               ) : null}
               {report.red_flags.length ? (
-                <Section>
-                  <Copy variant="headline">Warning signs</Copy>
+                <View
+                  style={{
+                    gap: Spacing.two,
+                    padding: Spacing.three,
+                    borderRadius: Radius.medium,
+                    backgroundColor: theme.warningSurface,
+                  }}
+                >
+                  <Copy variant="headline" accessibilityRole="header">
+                    Warning signs
+                  </Copy>
                   {report.red_flags.map((flag, i) => (
                     <Copy key={`${i}-${flag}`} style={{ color: theme.warning }}>
                       {hazards[flag as Hazard] ?? flag}
                     </Copy>
                   ))}
-                </Section>
+                </View>
               ) : null}
-              <FindRepairHelp key={report.id} report={report} />
+              {recommendedPro ? null : (
+                <FindRepairHelp key={report.id} report={report} />
+              )}
+              <Disclosure label="Assessment details">
+                {report.likely_cause ? <Copy>{report.likely_cause}</Copy> : null}
+                <Copy variant="caption" muted>
+                  {mock ? "Demo confidence" : "Model confidence"}:{" "}
+                  {Math.round(Number(report.confidence) * 100)}%
+                </Copy>
+                {report.confidence_note ? (
+                  <Copy variant="caption" muted>{report.confidence_note}</Copy>
+                ) : null}
+              </Disclosure>
             </>
           ) : (
             <Section>
@@ -213,8 +256,13 @@ export default function ProblemScreen() {
               </Copy>
             </Section>
           )}
-          <Section>
-            <Copy variant="headline">How is it changing?</Copy>
+          <Panel>
+            <Copy variant="eyebrow" style={{ color: theme.accent }}>
+              FOLLOW-UP
+            </Copy>
+            <Copy variant="headline" accessibilityRole="header">
+              How is it changing?
+            </Copy>
             <Copy muted>
               {problem.latest_measurement?.calibrated_area_mm2 != null
                 ? `Approximately ${(problem.latest_measurement.calibrated_area_mm2 / 100).toPrecision(2)} cm² of highlighted surface. Calibrated using ${calibrationLabel(problem.latest_measurement.calibration?.method ?? "")}. Accuracy depends on the highlight, calibration, and a flat surface. Crack width has not been measured.`
@@ -222,12 +270,15 @@ export default function ProblemScreen() {
             </Copy>
             {delta ? (
               <>
-                <Copy>
-                  {delta.growth === "unknown"
-                    ? "Unable to compare yet"
-                    : delta.growth.charAt(0).toUpperCase() +
-                      delta.growth.slice(1)}
-                </Copy>
+                <StatusBadge
+                  label={
+                    delta.growth === "unknown"
+                      ? "Unable to compare yet"
+                      : delta.growth.charAt(0).toUpperCase() +
+                        delta.growth.slice(1)
+                  }
+                  warning={delta.growth === "growing"}
+                />
                 <Copy muted>
                   {delta.growth === "unknown"
                     ? "Comparable calibrated measurements are unavailable. Changes in framing can look like growth; no physical comparison is available."
@@ -253,18 +304,13 @@ export default function ProblemScreen() {
                 . No reminder is scheduled.
               </Copy>
             ) : null}
-          </Section>
-          <Action
-            label={report ? "Check again" : "Add a photo"}
-            onPress={() =>
-              router.push({ pathname: "/capture", params: { problemId: id } })
-            }
-          />
-          <Action
-            label="Back to my home"
-            secondary
-            onPress={() => router.dismissTo("/")}
-          />
+            <Action
+              label={report ? "Check again" : "Add a photo"}
+              onPress={() =>
+                router.push({ pathname: "/capture", params: { problemId: id } })
+              }
+            />
+          </Panel>
           {report ? (
             <Disclosure label="Save a device copy">
               <DeviceCopies
@@ -277,6 +323,10 @@ export default function ProblemScreen() {
           ) : null}
           <Panel>
             <Copy variant="headline">Manage job</Copy>
+            <Copy variant="caption" muted>
+              {problem.location_note || "Location not added"} · Saved{" "}
+              {new Date(problem.created_at).toLocaleDateString()}
+            </Copy>
             <JobStorage id={id} />
             <DeleteJob
               id={id}
@@ -286,6 +336,11 @@ export default function ProblemScreen() {
               }
             />
           </Panel>
+          <Action
+            label="Back to my home"
+            secondary
+            onPress={() => router.dismissTo("/")}
+          />
         </>
       ) : null}
     </ScrollView>

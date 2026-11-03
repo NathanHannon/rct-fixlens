@@ -19,6 +19,7 @@ export const Colors = {
     backgroundSelected: "#E0E1E6",
     textSecondary: "#60646C",
     accent: "#116B5D",
+    onAccent: "#FFFFFF",
     accentSurface: "#E5F1ED",
     warning: "#8C351D",
     warningSurface: "#FFF0E9",
@@ -34,6 +35,7 @@ export const Colors = {
     backgroundSelected: "#2E3135",
     textSecondary: "#B0B4BA",
     accent: "#8BD9C6",
+    onAccent: "#0C2921",
     accentSurface: "#173A32",
     warning: "#FFB79C",
     warningSurface: "#44281F",
@@ -81,6 +83,8 @@ export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
 
 export const Typography = {
+  display: { fontSize: 34, lineHeight: 38, fontWeight: "700", letterSpacing: -1.2 },
+  eyebrow: { fontSize: 11, lineHeight: 16, fontWeight: "700", letterSpacing: 1.5 },
   title: { fontSize: 26, lineHeight: 34, fontWeight: "600" },
   headline: { fontSize: 18, lineHeight: 26, fontWeight: "600" },
   body: { fontSize: 16, lineHeight: 24 },

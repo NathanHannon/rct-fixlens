@@ -8,6 +8,7 @@ import {
 } from "expo-router";
 import { Host, Picker, TextInput, useNativeState } from "@expo/ui";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import { api, errorMessage } from "@/api/client";
 import { categories, urgencyLabels, type Problem } from "@/api/types";
 import {
@@ -20,7 +21,7 @@ import {
 } from "@/components/fixlens-ui";
 import { DeleteJob } from "./delete-job";
 import { JobThumbnail } from "./job-thumbnail";
-import { Spacing, MaxContentWidth } from "@/constants/theme";
+import { Radius, Spacing, MaxContentWidth } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
 export default function ProblemsHome() {
@@ -94,55 +95,75 @@ export default function ProblemsHome() {
       }
       ListHeaderComponent={
         <View style={{ gap: Spacing.three }}>
-          <Copy
-            variant="caption"
-            style={{ color: theme.accent, fontWeight: "600" }}
+          <View
+            style={{
+              backgroundColor: theme.accentSurface,
+              borderRadius: Radius.large,
+              borderCurve: "continuous",
+              padding: Spacing.three,
+              gap: Spacing.three,
+            }}
           >
-            A CLEARER PICTURE OF YOUR HOME
-          </Copy>
-          <Copy variant="title">
-            {problems?.length === 0 && !error
-              ? "Start with one photo."
-              : "Your home, in focus."}
-          </Copy>
-          <Copy muted>
-            Spot a problem, find your next step, and keep track of what changes.
-          </Copy>
-          <Action
-            label="Check a problem"
-            testID="check-problem"
-            onPress={() => router.push("/capture")}
-          />
-          {problems?.length ? (
             <View
               style={{
                 flexDirection: "row",
-                gap: Spacing.four,
-                flexWrap: "wrap",
-                paddingVertical: Spacing.two,
+                alignItems: "center",
+                gap: Spacing.two,
               }}
             >
-              <View>
-                <Copy variant="title">{problems.length}</Copy>
-                <Copy variant="caption" muted>
-                  saved jobs
-                </Copy>
-              </View>
-              <View>
+              <View style={{ flex: 1, gap: Spacing.one }}>
                 <Copy
-                  variant="title"
-                  style={{ color: attention ? theme.warning : theme.accent }}
+                  variant="caption"
+                  style={{
+                    color: theme.accent,
+                    letterSpacing: 1.2,
+                    fontWeight: "700",
+                  }}
                 >
-                  {attention}
+                  HOME INSPECTION
                 </Copy>
-                <Copy variant="caption" muted>
-                  need attention
+                <Copy variant="title" accessibilityRole="header">
+                  {problems?.length === 0 && !error
+                    ? "Start with one photo."
+                    : "Your home, in focus."}
                 </Copy>
               </View>
+              <Svg
+                width={Spacing.six}
+                height={Spacing.six}
+                viewBox="0 0 64 64"
+                accessible={false}
+              >
+                <Path
+                  d="M6 19V6h13m26 0h13v13m0 26v13H45m-26 0H6V45"
+                  stroke={theme.accent}
+                  strokeWidth={2}
+                  opacity={0.45}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <Path
+                  d="M15 31 32 17l17 14M20 29v19h24V29M34 29l-6 8h7l-4 8"
+                  stroke={theme.accent}
+                  strokeWidth={2}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
             </View>
-          ) : null}
+            <Copy muted>
+              See what needs fixing, from a photo.
+            </Copy>
+            <Action
+              label="Check a problem"
+              testID="check-problem"
+              onPress={() => router.push("/capture")}
+            />
+          </View>
           <Copy variant="caption" muted>
-            Shared demo home · Everyone uses the same saved problems.
+            Shared demo · Saved jobs are visible to everyone.
           </Copy>
           {message || deleted ? (
             <Notice>
@@ -150,35 +171,71 @@ export default function ProblemsHome() {
             </Notice>
           ) : null}
           {problems?.length ? (
-            <>
-              <Copy variant="headline">Saved jobs</Copy>
-              <Host matchContents ignoreSafeArea="all" seedColor={theme.accent}>
-                <TextInput
-                  value={search}
-                  onChangeText={setQuery}
-                  placeholder="Search jobs"
-                  placeholderTextColor={theme.textSecondary}
-                  autoCorrect={false}
-                  textStyle={{ color: theme.text }}
-                  style={{
-                    padding: Spacing.three,
-                    width: "100%",
-                    backgroundColor: theme.surface,
-                  }}
-                />
-              </Host>
-              <Host matchContents ignoreSafeArea="all" seedColor={theme.accent}>
-                <Picker
-                  selectedValue={filter}
-                  onValueChange={setFilter}
-                  testID="job-filter"
+            <View style={{ gap: Spacing.two }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: Spacing.two,
+                }}
+              >
+                <Copy variant="headline" accessibilityRole="header">
+                  Saved jobs ({problems.length})
+                </Copy>
+                {attention > 0 ? (
+                  <StatusBadge
+                    label={`Needs attention (${attention})`}
+                    warning
+                  />
+                ) : null}
+              </View>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: Spacing.two,
+                }}
+              >
+                <Host
+                  matchContents={{ vertical: true }}
+                  ignoreSafeArea="all"
+                  seedColor={theme.accent}
+                  style={{ flexGrow: 1, flexBasis: 140 }}
                 >
-                  <Picker.Item value="all" label="All jobs" />
-                  <Picker.Item value="attention" label="Needs attention" />
-                  <Picker.Item value="monitor" label="Monitoring" />
-                </Picker>
-              </Host>
-            </>
+                  <TextInput
+                    value={search}
+                    onChangeText={setQuery}
+                    placeholder="Search jobs"
+                    placeholderTextColor={theme.textSecondary}
+                    autoCorrect={false}
+                    textStyle={{ color: theme.text }}
+                    style={{
+                      padding: Spacing.two,
+                      width: "100%",
+                      backgroundColor: theme.surface,
+                    }}
+                  />
+                </Host>
+                <Host
+                  matchContents
+                  ignoreSafeArea="all"
+                  seedColor={theme.accent}
+                >
+                  <Picker
+                    selectedValue={filter}
+                    onValueChange={setFilter}
+                    testID="job-filter"
+                  >
+                    <Picker.Item value="all" label="All jobs" />
+                    <Picker.Item value="attention" label="Needs attention" />
+                    <Picker.Item value="monitor" label="Monitoring" />
+                  </Picker>
+                </Host>
+              </View>
+            </View>
           ) : null}
           {error ? (
             <Section>
@@ -208,75 +265,90 @@ export default function ProblemsHome() {
       }
       renderItem={({ item }) => (
         <Panel>
+          <Link
+            href={{ pathname: "/problem/[id]", params: { id: item.id } }}
+            asChild
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={"Open " + item.title}
+              style={({ pressed }) => ({
+                opacity: pressed ? 0.65 : 1,
+              })}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: Spacing.three,
+                  alignItems: "center",
+                }}
+              >
+                <JobThumbnail uri={item.latest_capture?.photo_url} />
+                <View style={{ flex: 1, gap: Spacing.one }}>
+                  <Copy variant="caption" muted>
+                    {categories[item.category]}
+                  </Copy>
+                  <Copy variant="headline" numberOfLines={2}>
+                    {item.title}
+                  </Copy>
+                  <Copy variant="caption" muted>
+                    {item.location_note ||
+                      new Date(item.created_at).toLocaleDateString()}
+                  </Copy>
+                </View>
+                <Svg width={16} height={16} viewBox="0 0 16 16" accessible={false}>
+                  <Path
+                    d="m6 3 5 5-5 5"
+                    fill="none"
+                    stroke={theme.accent}
+                    strokeWidth={1.75}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+              </View>
+            </Pressable>
+          </Link>
           <View
             style={{
+              borderTopWidth: 1,
+              borderTopColor: theme.border,
+              paddingTop: Spacing.one,
               flexDirection: "row",
-              alignItems: "flex-start",
-              gap: Spacing.two,
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              columnGap: Spacing.two,
             }}
           >
-            <Link
-              href={{ pathname: "/problem/[id]", params: { id: item.id } }}
-              asChild
-            >
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={"Open " + item.title}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  opacity: pressed ? 0.65 : 1,
-                  gap: Spacing.three,
-                })}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    gap: Spacing.three,
-                    alignItems: "center",
-                  }}
-                >
-                  <JobThumbnail uri={item.latest_capture?.photo_url} />
-                  <View style={{ flex: 1, gap: Spacing.one }}>
-                    <Copy variant="caption" muted>
-                      {categories[item.category]}
-                    </Copy>
-                    <Copy variant="headline" numberOfLines={2}>
-                      {item.title}
-                    </Copy>
-                    <Copy variant="caption" muted>
-                      {item.location_note ||
-                        new Date(item.created_at).toLocaleDateString()}
-                    </Copy>
-                  </View>
-                </View>
-                <StatusBadge
-                  label={
-                    item.current_urgency
-                      ? urgencyLabels[item.current_urgency]
-                      : "Ready for assessment"
-                  }
-                  warning={
-                    item.current_urgency === "pro_now" ||
-                    item.current_urgency === "fix_soon"
-                  }
-                />
-              </Pressable>
-            </Link>
-            <DeleteJob
-              id={item.id}
-              title={item.title}
-              compact
-              onDeleted={(result) => {
-                setProblems((current) =>
-                  current?.filter((p) => p.id !== item.id),
-                );
-                setMessage(
-                  result.status === "deleting"
-                    ? "Job removal queued. Cloud cleanup will retry automatically."
-                    : "Job removed. Late uploads will be cleaned automatically.",
-                );
-              }}
+            <StatusBadge
+              label={
+                item.current_urgency
+                  ? urgencyLabels[item.current_urgency]
+                  : "Ready for assessment"
+              }
+              warning={
+                item.current_urgency === "pro_now" ||
+                item.current_urgency === "fix_soon"
+              }
             />
+            <View style={{ alignSelf: "flex-end" }}>
+              <DeleteJob
+                id={item.id}
+                title={item.title}
+                compact
+                onDeleted={(result) => {
+                  setProblems((current) =>
+                    current?.filter((p) => p.id !== item.id),
+                  );
+                  setMessage(
+                    result.status === "deleting"
+                      ? "Job removal queued. Cloud cleanup will retry automatically."
+                      : "Job removed. Late uploads will be cleaned automatically.",
+                  );
+                }}
+              />
+            </View>
           </View>
         </Panel>
       )}

@@ -136,6 +136,9 @@ async function backend(
           mask_url: unavailable
             ? null
             : "https://uploads.fixlens.test/mask.png",
+          outline_url: unavailable
+            ? null
+            : "https://uploads.fixlens.test/outline.png",
           status: unavailable ? "unavailable" : "candidate",
           reason: unavailable
             ? "The highlight included unaffected ceiling."
@@ -433,6 +436,16 @@ test("the default path needs only photo, paint, preview and assessment", async (
     fullPage: true,
   });
   await page.getByText("Preview highlight", { exact: true }).click();
+  const outline = page.getByRole("img", { name: "Damage outline", exact: true });
+  const shade = page.getByRole("switch", { name: "Shade inside the outline" });
+  await expect(outline).toBeVisible();
+  await expect(page.getByTestId("brush-stroke-0")).toHaveCount(0);
+  await expect(page.getByTestId("outline-fill")).toBeVisible();
+  await expect(shade).toBeChecked();
+  await page.getByText("Shade inside the outline", { exact: true }).click();
+  await expect(shade).not.toBeChecked();
+  await expect(page.getByTestId("outline-fill")).toHaveCount(0);
+  await expect(outline).toBeVisible();
   await page.getByText("Get assessment", { exact: true }).click();
   await expect(
     page.getByText("Mock assessment: surface damage", { exact: true }),
@@ -440,7 +453,10 @@ test("the default path needs only photo, paint, preview and assessment", async (
   await expect(page.getByText("Simulated", { exact: true })).toBeHidden();
   await expect(
     page.getByText("Call a professional", { exact: true }),
-  ).toBeVisible();
+  ).toBeInViewport();
+  await expect(
+    page.getByRole("img", { name: "Assessment photo", exact: true }),
+  ).toBeInViewport();
   await page.getByText("Assessment details", { exact: true }).click();
   await expect(page.getByText("Simulated", { exact: true })).toBeVisible();
   await page.screenshot({
@@ -474,6 +490,17 @@ test("a visible description guides targeting and can be refined without another 
     "Thin gray scuff near the light, not the whole ceiling",
   );
   await expect(description).toBeVisible();
+  const help = page.getByText("Describe the mark’s shape, color, and location", {
+    exact: false,
+  });
+  await expect(help).toBeVisible();
+  const fieldBox = await description.boundingBox();
+  const helpBox = await help.boundingBox();
+  expect(fieldBox).not.toBeNull();
+  expect(helpBox).not.toBeNull();
+  if (fieldBox && helpBox) {
+    expect(helpBox.y).toBeGreaterThanOrEqual(fieldBox.y + fieldBox.height);
+  }
   await expect(page.getByPlaceholder("Basement, north wall")).toBeHidden();
   await description.fill("  Gray mark near the light.  ");
   await page.getByText("Preview highlight", { exact: true }).click();
@@ -827,9 +854,10 @@ test("unreliable segmentation can be assessed without a mask or physical measure
     .getByText("Assess photo without measurements", { exact: true })
     .click();
   await expect(
-    page.getByText(
-      "Photo-based assessment. A reliable damage outline was unavailable, so size and growth measurements were not recorded for this photo.",
-    ),
+    page.getByText("Assessment ready · Size unavailable", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("size and growth weren’t recorded", { exact: false }),
   ).toBeVisible();
   await expect(
     page.getByText("No physical size estimate is available for this capture."),
@@ -852,9 +880,7 @@ test("a final mask rejection shows the saved photo-only report after a candidate
   ).toBeVisible();
   await page.getByText("Get assessment", { exact: true }).click();
   await expect(
-    page.getByText(
-      "Photo-based assessment. A reliable damage outline was unavailable, so size and growth measurements were not recorded for this photo.",
-    ),
+    page.getByText("Assessment ready · Size unavailable", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("No physical size estimate is available for this capture."),
@@ -1239,7 +1265,7 @@ test("saved jobs show thumbnails and support search, status filters, and deletio
   await page.goto("/");
   await expect(
     page.getByRole("img", { name: "Latest job photo" }),
-  ).toBeVisible();
+  ).toBeInViewport();
   await page.screenshot({
     path: ".tmp/jobs-dashboard-phone.png",
     fullPage: true,
